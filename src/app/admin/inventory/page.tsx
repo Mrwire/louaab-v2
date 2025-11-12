@@ -711,7 +711,24 @@ export default function InventoryPage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {/* Statut Backend */}
+              {              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch(${API_BASE_URL}/admin/sync/toys, { method: 'POST' });
+                    if (!res.ok) throw new Error('sync_failed');
+                    const body = await res.json();
+                    showNotification(Synchronisation jouets: + créés,  mis à jour, 'success');
+                    await loadInventory();
+                  } catch (e) {
+                    showNotification('Échec de la synchronisation des jouets', 'error');
+                  }
+                }}
+                className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                title="Synchroniser à partir du mapping JSON"
+              >
+                <RefreshCw className=\"h-4 w-4\" />
+                Sync jouets
+              </button>/* Statut Backend */}
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-100">
                 {backendStatus === 'checking' && (
                   <>
@@ -2000,6 +2017,7 @@ export default function InventoryPage() {
     </div>
   );
 }
+
 
 
 

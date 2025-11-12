@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { 
@@ -36,14 +36,26 @@ const availableCities = [
   "Settat", "El Jadida", "Khouribga", "Beni Mellal", "Marrakech"
 ];
 
-export default function AdminPacksPage() {
+export default function AdminPacksPage() {  // Petit bouton en-tête pour push vers DB
+  // (ceci gardera l'UI existante mais permet d'alimenter la BDD)
+  // Tu peux déplacer ce bouton dans ta toolbar existante si besoin\n
   const [packs, setPacks] = useState<Pack[]>([]);
   const [editingPack, setEditingPack] = useState<Pack | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
   // Charger les packs depuis le service
-  useEffect(() => {
+    // Bouton sync vers BDD
+  const syncPacksToDB = async () => {
+    try {
+      const res = await fetch(${typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_API_URL || '/api') : 'http://localhost:3001/api'}/admin/sync/packs, { method: 'POST' });
+      if (!res.ok) throw new Error('sync_failed');
+      // juste feedback UI: on ne rebranche pas toute la page maintenant
+      console.log('Packs synchronisés en BDD');
+    } catch (e) {
+      console.error('Échec de la synchronisation des packs', e);
+    }
+  };useEffect(() => {
     setPacks(PackManager.getAllPacks());
   }, []);
 
@@ -75,7 +87,7 @@ export default function AdminPacksPage() {
       displayOrder: packs.length + 1,
       badge: undefined,
       color: "mint",
-      icon: "🎁",
+      icon: "ðŸŽ",
       ageRange: "0-8 ans",
       features: []
     };
@@ -96,7 +108,7 @@ export default function AdminPacksPage() {
   };
 
   const handleDelete = (packId: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer ce pack ?')) {
+    if (confirm('ÃŠtes-vous sÃ»r de vouloir supprimer ce pack ?')) {
       PackManager.deletePack(packId);
       setPacks(PackManager.getAllPacks());
     }
@@ -126,7 +138,7 @@ export default function AdminPacksPage() {
         const content = e.target?.result as string;
         if (PackManager.importPacks(content)) {
           setPacks(PackManager.getAllPacks());
-          alert('Packs importés avec succès !');
+          alert('Packs importÃ©s avec succÃ¨s !');
         } else {
           alert('Erreur lors de l\'importation des packs.');
         }
@@ -136,7 +148,7 @@ export default function AdminPacksPage() {
   };
 
   const handleReset = () => {
-    if (confirm('Êtes-vous sûr de vouloir réinitialiser aux packs par défaut ? Cette action supprimera tous les packs personnalisés.')) {
+    if (confirm('ÃŠtes-vous sÃ»r de vouloir rÃ©initialiser aux packs par dÃ©faut ? Cette action supprimera tous les packs personnalisÃ©s.')) {
       PackManager.resetToDefault();
       setPacks(PackManager.getAllPacks());
     }
@@ -201,7 +213,7 @@ export default function AdminPacksPage() {
                 href="/admin/dashboard" 
                 className="text-sm text-gray-600 hover:text-mint transition-colors"
               >
-                ← Dashboard
+                â† Dashboard
               </a>
               <div className="h-6 w-px bg-gray-300"></div>
               <div>
@@ -215,7 +227,7 @@ export default function AdminPacksPage() {
                 className="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 transition"
               >
                 {showPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                {showPreview ? 'Masquer' : 'Aperçu'}
+                {showPreview ? 'Masquer' : 'AperÃ§u'}
               </button>
               <button
                 onClick={handleExport}
@@ -333,7 +345,7 @@ export default function AdminPacksPage() {
                     onClick={() => handleToggleActive(pack.id)}
                     className="flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-1 text-sm text-gray-600 hover:bg-gray-200"
                   >
-                    {pack.isActive ? 'Désactiver' : 'Activer'}
+                    {pack.isActive ? 'DÃ©sactiver' : 'Activer'}
                   </button>
                   <button
                     onClick={() => handleEdit(pack)}
@@ -370,7 +382,7 @@ export default function AdminPacksPage() {
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4 text-gray-400" />
                   <div>
-                    <p className="text-xs text-slate">Durée</p>
+                    <p className="text-xs text-slate">DurÃ©e</p>
                     <p className="text-sm font-medium text-charcoal">{pack.durationMonths} mois</p>
                   </div>
                 </div>
@@ -392,7 +404,7 @@ export default function AdminPacksPage() {
             <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-charcoal">
-                  {isCreating ? 'Créer un nouveau pack' : 'Modifier le pack'}
+                  {isCreating ? 'CrÃ©er un nouveau pack' : 'Modifier le pack'}
                 </h2>
                 <button
                   onClick={() => setEditingPack(null)}
@@ -449,13 +461,13 @@ export default function AdminPacksPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate mb-2">Icône</label>
+                    <label className="block text-sm font-medium text-slate mb-2">IcÃ´ne</label>
                     <input
                       type="text"
                       value={editingPack.icon}
                       onChange={(e) => setEditingPack({...editingPack, icon: e.target.value})}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-charcoal focus:border-mint focus:outline-none"
-                      placeholder="🎁"
+                      placeholder="ðŸŽ"
                     />
                   </div>
 
@@ -516,7 +528,7 @@ export default function AdminPacksPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-slate mb-2">Durée (mois)</label>
+                      <label className="block text-sm font-medium text-slate mb-2">DurÃ©e (mois)</label>
                       <input
                         type="number"
                         value={editingPack.durationMonths}
@@ -527,7 +539,7 @@ export default function AdminPacksPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate mb-2">Tranche d'âge</label>
+                    <label className="block text-sm font-medium text-slate mb-2">Tranche d'Ã¢ge</label>
                     <input
                       type="text"
                       value={editingPack.ageRange}
@@ -545,13 +557,13 @@ export default function AdminPacksPage() {
                         onChange={(e) => setEditingPack({...editingPack, swapIncluded: e.target.checked})}
                         className="rounded border-gray-300 text-mint focus:ring-mint"
                       />
-                      <span className="text-sm text-slate">Échanges inclus</span>
+                      <span className="text-sm text-slate">Ã‰changes inclus</span>
                     </label>
                   </div>
 
                   {editingPack.swapIncluded && (
                     <div>
-                      <label className="block text-sm font-medium text-slate mb-2">Fréquence d'échange (jours)</label>
+                      <label className="block text-sm font-medium text-slate mb-2">FrÃ©quence d'Ã©change (jours)</label>
                       <input
                         type="number"
                         value={editingPack.swapFrequencyDays || 30}
@@ -601,7 +613,7 @@ export default function AdminPacksPage() {
 
               {/* Features */}
               <div className="mt-6">
-                <h3 className="text-lg font-semibold text-charcoal mb-4">Fonctionnalités</h3>
+                <h3 className="text-lg font-semibold text-charcoal mb-4">FonctionnalitÃ©s</h3>
                 <div className="space-y-2">
                   {editingPack.features.map((feature, index) => (
                     <div key={index} className="flex items-center gap-2">
@@ -610,7 +622,7 @@ export default function AdminPacksPage() {
                         value={feature}
                         onChange={(e) => updateFeature(index, e.target.value)}
                         className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-charcoal focus:border-mint focus:outline-none"
-                        placeholder="Fonctionnalité du pack"
+                        placeholder="FonctionnalitÃ© du pack"
                       />
                       <button
                         onClick={() => removeFeature(index)}
@@ -625,7 +637,7 @@ export default function AdminPacksPage() {
                     className="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-600 hover:bg-gray-200"
                   >
                     <Plus className="h-4 w-4" />
-                    Ajouter une fonctionnalité
+                    Ajouter une fonctionnalitÃ©
                   </button>
                 </div>
               </div>
@@ -655,7 +667,7 @@ export default function AdminPacksPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
             <div className="w-full max-w-6xl max-h-[90vh] overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-charcoal">Aperçu des packs</h2>
+                <h2 className="text-xl font-bold text-charcoal">AperÃ§u des packs</h2>
                 <button
                   onClick={() => setShowPreview(false)}
                   className="rounded-lg bg-gray-100 p-2 text-gray-600 hover:bg-gray-200"
@@ -674,7 +686,7 @@ export default function AdminPacksPage() {
                   >
                     {pack.badge && (
                       <div className="absolute left-0 right-0 top-0 bg-gradient-to-r from-mint to-fresh-green py-2 text-center text-sm font-bold uppercase tracking-wide text-white">
-                        ⭐ {pack.badge}
+                        â­ {pack.badge}
                       </div>
                     )}
 
@@ -719,3 +731,5 @@ export default function AdminPacksPage() {
     </div>
   );
 }
+
+

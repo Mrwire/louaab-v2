@@ -11,6 +11,7 @@ import { CategoryModule } from './category.module';
 import { PackModule } from './pack.module';
 import { FAQModule } from './faq.module';
 import { ContactModule } from './contact.module';
+import { SyncModule } from './sync.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { ContactModule } from './contact.module';
     PackModule,
     FAQModule,
     ContactModule,
+    SyncModule,
   ],
 })
 export class AppModule {}
