@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "outDir": "./dist/backend",
+    "noEmit": false,
+    "isolatedModules": false
+  },
+  "include": ["src/backend/**/*.ts", "src/types/validator.ts"],
+  "exclude": ["node_modules", "src/app", "src/components", "src/contexts", "src/lib"]
+}

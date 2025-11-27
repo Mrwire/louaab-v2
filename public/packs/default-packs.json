@@ -1,0 +1,41 @@
+[
+  {
+    "name": "Mini Pack",
+    "slug": "mini-pack",
+    "type": "mini",
+    "description": "Parfait pour débuter",
+    "price": 199,
+    "toyCount": 3,
+    "durationDays": 30,
+    "features": ["3 jouets", "Échanges illimités", "Livraison gratuite", "Sans engagement"],
+    "icon": "🎁",
+    "displayOrder": 0,
+    "isActive": true
+  },
+  {
+    "name": "Maxi Pack",
+    "slug": "maxi-pack",
+    "type": "maxi",
+    "description": "Le plus populaire",
+    "price": 349,
+    "toyCount": 5,
+    "durationDays": 30,
+    "features": ["5 jouets", "Échanges illimités", "Livraison gratuite", "Support prioritaire"],
+    "icon": "⭐",
+    "displayOrder": 1,
+    "isActive": true
+  },
+  {
+    "name": "Mega Pack",
+    "slug": "mega-pack",
+    "type": "mega",
+    "description": "Pour les familles nombreuses",
+    "price": 499,
+    "toyCount": 8,
+    "durationDays": 30,
+    "features": ["8 jouets", "Échanges illimités", "Livraison gratuite partout au Maroc", "Conseils personnalisés"],
+    "icon": "💎",
+    "displayOrder": 2,
+    "isActive": true
+  }
+]
