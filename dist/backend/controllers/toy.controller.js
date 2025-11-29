@@ -76,6 +76,15 @@ let ToyController = class ToyController {
             message: 'Jouet supprimé avec succès',
         };
     }
+    // Mise à jour de la caution en masse
+    async bulkUpdateDeposit(percentage, base = 'daily') {
+        const updated = await this.toyService.updateDepositForAll(Number(percentage), base);
+        return {
+            success: true,
+            data: { updated },
+            message: `Caution mise à jour pour ${updated} jouet(s)`,
+        };
+    }
 };
 exports.ToyController = ToyController;
 __decorate([
@@ -137,6 +146,14 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], ToyController.prototype, "remove", null);
+__decorate([
+    (0, common_1.Patch)('deposit/bulk'),
+    __param(0, (0, common_1.Body)('percentage')),
+    __param(1, (0, common_1.Body)('base')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, String]),
+    __metadata("design:returntype", Promise)
+], ToyController.prototype, "bulkUpdateDeposit", null);
 exports.ToyController = ToyController = __decorate([
     (0, common_1.Controller)('toys'),
     __metadata("design:paramtypes", [toy_service_1.ToyService])

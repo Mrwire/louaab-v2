@@ -4,16 +4,20 @@ export interface OrderItem {
   startDate: string;
   quantity: number;
   price: number;
+  stockQuantity?: number;
+  availableQuantity?: number;
+  imageUrl?: string;
 }
 
 export interface Order {
   id: string;
+  orderNumber?: string;
   customerName: string;
   customerPhone: string;
   deliveryAddress?: string;
   items: OrderItem[];
   totalPrice: number;
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'delivered' | 'returned' | 'completed' | 'cancelled';
   createdAt: string;
   notes?: string;
 }

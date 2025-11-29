@@ -14,7 +14,6 @@ import {
 import { ToyService } from '../services/toy.service';
 import { CreateToyDto, UpdateToyDto, QueryToysDto } from '../dto/create-toy.dto';
 import { ToyStatus } from '../entities/toy.entity';
-import { Body } from '@nestjs/common';
 
 @Controller('toys')
 export class ToyController {
@@ -110,4 +109,3 @@ export class ToyController {
     };
   }
 }
-

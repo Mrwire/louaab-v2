@@ -1,10 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, Between, In } from 'typeorm';
 import { Toy, ToyStatus } from '../entities/toy.entity';
 import { ToyCategory } from '../entities/toy-category.entity';
 import { ToyImage } from '../entities/toy-image.entity';
 import { CreateToyDto, UpdateToyDto, QueryToysDto } from '../dto/create-toy.dto';
+
+const slugify = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)+/g, '');
 
 @Injectable()
 export class ToyService {
@@ -17,8 +25,33 @@ export class ToyService {
     private imageRepository: Repository<ToyImage>,
   ) {}
 
+  private async generateUniqueSlug(baseValue: string, excludeId?: string) {
+    let base = slugify(baseValue);
+    if (!base) {
+      base = `toy-${Date.now()}`;
+    }
+    let slugCandidate = base;
+    let counter = 1;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const existing = await this.toyRepository.findOne({
+        where: { slug: slugCandidate },
+      });
+      if (!existing || existing.id === excludeId) {
+        return slugCandidate;
+      }
+      slugCandidate = `${base}-${counter++}`;
+    }
+  }
+
   async create(createToyDto: CreateToyDto): Promise<Toy> {
     const { categoryIds, images, ...toyData } = createToyDto;
+
+    if (!toyData.slug && toyData.name) {
+      toyData.slug = await this.generateUniqueSlug(toyData.name);
+    } else if (toyData.slug) {
+      toyData.slug = await this.generateUniqueSlug(toyData.slug);
+    }
 
     // Create toy
     const toy = this.toyRepository.create(toyData);
@@ -31,8 +64,22 @@ export class ToyService {
       toy.categories = categories;
     }
 
-    // Save toy
-    const savedToy = await this.toyRepository.save(toy);
+    // Save toy (handle unique conflicts gracefully)
+    let savedToy: Toy;
+    try {
+      savedToy = await this.toyRepository.save(toy);
+    } catch (error: any) {
+      if (error?.code === '23505') {
+        const field =
+          typeof error?.detail === 'string' && error.detail.includes('(slug)')
+            ? 'slug'
+            : typeof error?.detail === 'string' && error.detail.includes('(sku)')
+              ? 'sku'
+              : 'champ unique';
+        throw new ConflictException(`Un ${field} identique existe déjà. Merci de changer le ${field}.`);
+      }
+      throw error;
+    }
 
     // Handle images
     if (images && images.length > 0) {
@@ -142,6 +189,47 @@ export class ToyService {
 
     // Update toy data
     Object.assign(toy, toyData);
+
+    // Keep availability in sync with stock updates
+    if (toyData.stockQuantity !== undefined) {
+      const newStock = Number(toyData.stockQuantity) || 0;
+      const currentStock = Number(toy.stockQuantity || 0);
+      const currentAvailable = Number(toy.availableQuantity || 0);
+      const stockDelta = newStock - currentStock;
+
+      toy.stockQuantity = newStock;
+
+      if (stockDelta > 0) {
+        // Increase available stock by the delta, capped to the new stock level
+        toy.availableQuantity = Math.min(newStock, currentAvailable + stockDelta);
+      } else if (stockDelta < 0) {
+        // If stock is reduced, clamp available to the new stock level
+        toy.availableQuantity = Math.min(newStock, currentAvailable);
+      } else {
+        // No stock change, ensure available is not greater than stock
+        toy.availableQuantity = Math.min(newStock, currentAvailable);
+      }
+
+      toy.availableQuantity = Math.max(0, toy.availableQuantity);
+
+      if (updateToyDto.status === undefined) {
+        toy.status = newStock > 0 ? ToyStatus.AVAILABLE : ToyStatus.MAINTENANCE;
+      }
+    }
+
+    // If availableQuantity is explicitly provided, honor it but cap to stock
+    if (toyData.availableQuantity !== undefined) {
+      const provided = Number(toyData.availableQuantity) || 0;
+      const cap = Number(toy.stockQuantity || toyData.stockQuantity || 0);
+      toy.availableQuantity = cap ? Math.min(provided, cap) : provided;
+      toy.availableQuantity = Math.max(0, toy.availableQuantity);
+    }
+
+    if (toyData.slug) {
+      toy.slug = await this.generateUniqueSlug(toyData.slug, toy.id);
+    } else if (!toy.slug && toy.name) {
+      toy.slug = await this.generateUniqueSlug(toy.name, toy.id);
+    }
 
     // Update categories if provided
     if (categoryIds) {

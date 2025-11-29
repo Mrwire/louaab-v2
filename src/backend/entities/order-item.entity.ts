@@ -22,6 +22,9 @@ export class OrderItem {
   @Column({ nullable: true })
   rentalDurationDays!: number;
 
+  @Column({ type: 'date', nullable: true })
+  rentalStartDate!: Date;
+
   @Column({
     type: 'enum',
     enum: ToyCondition,

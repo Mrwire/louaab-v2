@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { PageShell } from "@/components/page-shell";
 import { SectionHeading } from "@/components/section-heading";
 import { getAllToys, ToyData } from "@/lib/toys-data";
+import { formatDateInput } from "@/lib/date";
 import ToyCardWithReservation from "@/components/toy-card-with-reservation";
 import SearchBar from "@/components/search-bar";
 import { useFavorites } from "@/contexts/favorites-context";
@@ -119,7 +120,9 @@ export default function JouetsPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<string>('recent');
-  const [priceRange, setPriceRange] = useState([0, 200]);
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 2000]);
+  const [priceRangeLocked, setPriceRangeLocked] = useState(false);
+  const [maxPrice, setMaxPrice] = useState(2000);
   const [toys, setToys] = useState<ToyData[]>([]);
   const [loading, setLoading] = useState(true);
   const [showSearchBar, setShowSearchBar] = useState(false);
@@ -143,12 +146,19 @@ export default function JouetsPage() {
     // Ajouter directement au panier avec des valeurs par défaut
     // L'utilisateur pourra modifier la durée et la date dans le panier
     const defaultDuration = "weekly"; // Durée hebdomadaire par défaut
-    const defaultDate = new Date().toISOString().split('T')[0]; // Date du jour
+    const defaultDate = formatDateInput(); // Date du jour
     
     addToCart(toy, defaultDuration, defaultDate);
     
     // Animation confetti
     triggerConfetti();
+  };
+
+  const getNumericPrice = (priceLabel?: string) => {
+    if (!priceLabel) return 0;
+    const normalized = priceLabel.replace(/[^\d.,]/g, "").replace(",", ".");
+    const price = parseFloat(normalized);
+    return Number.isFinite(price) ? price : 0;
   };
 
   // Charger les données des jouets
@@ -166,6 +176,19 @@ export default function JouetsPage() {
     loadData();
   }, []);
 
+  const computedMaxPrice = useMemo(() => {
+    if (!toys.length) return 2000;
+    const highestPrice = Math.max(...toys.map((toy) => getNumericPrice(toy.price)), 0);
+    return Math.max(200, Math.ceil(highestPrice / 50) * 50);
+  }, [toys]);
+
+  useEffect(() => {
+    setMaxPrice(computedMaxPrice);
+    if (!priceRangeLocked) {
+      setPriceRange([0, computedMaxPrice]);
+    }
+  }, [computedMaxPrice, priceRangeLocked]);
+
   const filteredToys = toys.filter((toy) => {
     const matchesCategory =
       selectedCategory === "Tous" || toy.category?.includes(selectedCategory);
@@ -175,23 +198,15 @@ export default function JouetsPage() {
       toy.description?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesAge = selectedAge === "all" || toy.age?.includes(selectedAge);
     // Note: Prix en string dans nos données, conversion nécessaire
-    const toyPrice = parseFloat(toy.price?.replace(/[^\d.]/g, '') || '0');
+    const toyPrice = getNumericPrice(toy.price);
     const matchesPrice = toyPrice >= priceRange[0] && toyPrice <= priceRange[1];
     return matchesCategory && matchesSearch && matchesAge && matchesPrice;
   });
 
   // Apply sorting
   const sortedToys = [...filteredToys].sort((a, b) => {
-    // Parse price handling both comma and dot as decimal separators
-    const parsePrice = (price: string) => {
-      if (!price) return 0;
-      // Remove all non-numeric characters except comma and dot, then replace comma with dot
-      const cleanPrice = price.replace(/[^\d.,]/g, '').replace(',', '.');
-      return parseFloat(cleanPrice) || 0;
-    };
-    
-    const aPrice = parsePrice(a.price || '');
-    const bPrice = parsePrice(b.price || '');
+    const aPrice = getNumericPrice(a.price);
+    const bPrice = getNumericPrice(b.price);
 
     switch (sortBy) {
       case 'price-asc':
@@ -302,11 +317,12 @@ export default function JouetsPage() {
                   <input
                     type="range"
                     min="0"
-                    max="200"
+                    max={maxPrice}
                     value={priceRange[1]}
-                    onChange={(e) =>
-                      setPriceRange([priceRange[0], parseInt(e.target.value)])
-                    }
+                    onChange={(e) => {
+                      setPriceRange([priceRange[0], parseInt(e.target.value)]);
+                      setPriceRangeLocked(true);
+                    }}
                     className="w-full accent-mint"
                   />
                   <div className="flex items-center justify-between text-sm text-slate">
@@ -317,7 +333,17 @@ export default function JouetsPage() {
               </div>
 
               {/* Reset Filters */}
-              <button onClick={() => { setSelectedCategory('Tous'); setSelectedAge('all'); setPriceRange([0,200]); setSearchQuery(''); setSortBy('recent'); }} className="w-full rounded-xl border border-mist py-3 text-sm font-medium text-charcoal transition hover:border-mint hover:bg-mint/10">
+              <button
+                onClick={() => {
+                  setSelectedCategory('Tous');
+                  setSelectedAge('all');
+                  setPriceRange([0, maxPrice]);
+                  setPriceRangeLocked(false);
+                  setSearchQuery('');
+                  setSortBy('recent');
+                }}
+                className="w-full rounded-xl border border-mist py-3 text-sm font-medium text-charcoal transition hover:border-mint hover:bg-mint/10"
+              >
                 Réinitialiser les filtres
               </button>
             </div>
@@ -417,14 +443,16 @@ export default function JouetsPage() {
                 </div>
               ) : viewMode === "grid" ? (
                 sortedToys.map((toy) => (
-                  <ToyCardWithReservation key={toy.id} toy={toy} />
+                  <ToyCardWithReservation key={toy.backendId ?? toy.id} toy={toy} />
                 ))
               ) : (
-                sortedToys.map((toy) => (
-                  <div
-                    key={toy.id}
-                    className="group flex gap-4 rounded-2xl border border-mist bg-white p-4 shadow-sm transition hover:shadow-md"
-                  >
+                sortedToys.map((toy) => {
+                  const toyKey = String(toy.backendId ?? toy.id);
+                  return (
+                    <div
+                      key={toy.backendId ?? toy.id}
+                      className="group flex gap-4 rounded-2xl border border-mist bg-white p-4 shadow-sm transition hover:shadow-md"
+                    >
                     {/* Image */}
                     <Link
                       href={`/jouets/${toy.slug}`}
@@ -449,17 +477,17 @@ export default function JouetsPage() {
                             </h3>
                           </Link>
                           <button
-                            onClick={(e) => handleToggleFavorite(e, String(toy.id))}
+                            onClick={(e) => handleToggleFavorite(e, toyKey)}
                             className={`flex-shrink-0 transition-all duration-300 ${
-                              isFavorite(String(toy.id))
-                                ? 'text-coral scale-110'
-                                : 'text-coral/40 hover:text-coral hover:scale-110'
+                              isFavorite(toyKey)
+                                ? 'text-red-500 scale-110'
+                                : 'text-slate/40 hover:text-red-500 hover:scale-110'
                             }`}
-                            title={isFavorite(String(toy.id)) ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                            title={isFavorite(toyKey) ? 'Retirer des favoris' : 'Ajouter aux favoris'}
                           >
                             <Heart 
                               className={`h-5 w-5 transition-all ${
-                                isFavorite(String(toy.id)) ? 'fill-coral' : ''
+                                isFavorite(toyKey) ? 'fill-red-500 text-red-500' : ''
                               }`}
                             />
                           </button>
@@ -524,7 +552,8 @@ export default function JouetsPage() {
                       </div>
                     </div>
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
 

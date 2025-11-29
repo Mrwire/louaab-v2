@@ -1,4 +1,4 @@
-import { DataSource } from 'typeorm';
+import { DataSource, DeepPartial } from 'typeorm';
 import { AgeRange } from '../entities/age-range.entity';
 import { ToyCategory } from '../entities/toy-category.entity';
 import { Pack } from '../entities/pack.entity';
@@ -237,7 +237,7 @@ export async function seedDatabase(dataSource: DataSource) {
   for (const ageRangeData of defaultData.ageRanges) {
     const existing = await ageRangeRepository.findOne({ where: { slug: ageRangeData.slug } });
     if (!existing) {
-      const ageRange = ageRangeRepository.create(ageRangeData);
+      const ageRange = ageRangeRepository.create(ageRangeData as DeepPartial<AgeRange>);
       await ageRangeRepository.save(ageRange);
       console.log(`Created age range: ${ageRangeData.label}`);
     } else {
@@ -250,7 +250,7 @@ export async function seedDatabase(dataSource: DataSource) {
   for (const categoryData of defaultData.categories) {
     const existing = await categoryRepository.findOne({ where: { slug: categoryData.slug } });
     if (!existing) {
-      const category = categoryRepository.create(categoryData);
+      const category = categoryRepository.create(categoryData as DeepPartial<ToyCategory>);
       await categoryRepository.save(category);
       console.log(`Created category: ${categoryData.name}`);
     } else {
@@ -263,7 +263,7 @@ export async function seedDatabase(dataSource: DataSource) {
   for (const packData of defaultData.packs) {
     const existing = await packRepository.findOne({ where: { slug: packData.slug } });
     if (!existing) {
-      const pack = packRepository.create(packData);
+      const pack = packRepository.create(packData as DeepPartial<Pack>);
       await packRepository.save(pack);
       console.log(`Created pack: ${packData.name}`);
     } else {
@@ -276,7 +276,7 @@ export async function seedDatabase(dataSource: DataSource) {
   for (const faqData of defaultData.faqs) {
     const existing = await faqRepository.findOne({ where: { question: faqData.question } });
     if (!existing) {
-      const faq = faqRepository.create(faqData);
+      const faq = faqRepository.create(faqData as DeepPartial<FAQ>);
       await faqRepository.save(faq);
       console.log(`Created FAQ: ${faqData.question}`);
     } else {

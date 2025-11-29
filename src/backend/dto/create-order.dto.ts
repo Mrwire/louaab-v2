@@ -14,6 +14,10 @@ export class CreateOrderItemDto {
 
   @IsNumber()
   rentalDurationDays!: number;
+
+  @IsOptional()
+  @IsDateString()
+  rentalStartDate?: string;
 }
 
 export class CreateOrderDto {
@@ -102,8 +106,8 @@ export class QueryOrdersDto {
   customerId?: string;
 
   @IsOptional()
-  @IsEnum(OrderStatus)
-  status?: OrderStatus;
+  @IsString()
+  status?: string;
 
   @IsOptional()
   @IsString()
@@ -117,10 +121,12 @@ export class QueryOrdersDto {
   @IsDateString()
   deliveryDateTo?: string;
 
+  @Type(() => Number)
   @IsOptional()
   @IsNumber()
   page?: number = 1;
 
+  @Type(() => Number)
   @IsOptional()
   @IsNumber()
   limit?: number = 20;

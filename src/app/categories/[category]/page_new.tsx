@@ -116,7 +116,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
             {toys.length > 0 ? (
               <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
                 {toys.map((toy, index) => (
-                  <ToyCardWithReservation key={toy.id} toy={toy} priority={index < 6} />
+                  <ToyCardWithReservation key={toy.backendId ?? toy.id} toy={toy} priority={index < 6} />
                 ))}
               </div>
             ) : (

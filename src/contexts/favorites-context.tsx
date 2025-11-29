@@ -19,15 +19,23 @@ export const FavoritesProvider = ({ children }: { children: ReactNode }) => {
 
   // Load favorites from localStorage on mount
   useEffect(() => {
-    const storedFavorites = localStorage.getItem('louaab_favorites');
-    if (storedFavorites) {
-      setFavorites(JSON.parse(storedFavorites));
+    try {
+      const storedFavorites = localStorage.getItem('louaab_favorites');
+      if (storedFavorites) {
+        setFavorites(JSON.parse(storedFavorites));
+      }
+    } catch (error) {
+      console.error('Error loading favorites from localStorage:', error);
     }
   }, []);
 
   // Save favorites to localStorage on changes
   useEffect(() => {
-    localStorage.setItem('louaab_favorites', JSON.stringify(favorites));
+    try {
+      localStorage.setItem('louaab_favorites', JSON.stringify(favorites));
+    } catch (error) {
+      console.error('Error saving favorites to localStorage:', error);
+    }
   }, [favorites]);
 
   const addToFavorites = (toyId: string) => {

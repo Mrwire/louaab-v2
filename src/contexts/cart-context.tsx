@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { ToyData } from '@/lib/toys-data';
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { ToyData } from "@/lib/toys-data";
 
 export interface CartItem {
   id: string; // Identifiant unique: toyId-duration
@@ -13,9 +13,9 @@ export interface CartItem {
 
 export interface CartContextType {
   items: CartItem[];
-  addToCart: (toy: ToyData, duration: string, startDate: string) => void;
+  addToCart: (toy: ToyData, duration: string, startDate: string, quantity?: number) => void;
   removeFromCart: (itemId: string) => void;
-  updateItem: (itemId: string, updates: Partial<Pick<CartItem, 'duration' | 'startDate' | 'quantity'>>) => void;
+  updateItem: (itemId: string, updates: Partial<Pick<CartItem, "duration" | "startDate" | "quantity">>) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
   clearCart: () => void;
   getTotalPrice: () => number;
@@ -24,60 +24,68 @@ export interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
+const toNumber = (value: any) => {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
 
-  // Charger le panier depuis localStorage au montage
   useEffect(() => {
-    const savedCart = localStorage.getItem('louaab-cart');
+    const savedCart = localStorage.getItem("louaab-cart");
     if (savedCart) {
       try {
         setItems(JSON.parse(savedCart));
       } catch (error) {
-        console.error('Erreur lors du chargement du panier:', error);
+        console.error("Erreur lors du chargement du panier:", error);
       }
     }
   }, []);
 
-  // Sauvegarder le panier dans localStorage à chaque changement
   useEffect(() => {
-    localStorage.setItem('louaab-cart', JSON.stringify(items));
+    localStorage.setItem("louaab-cart", JSON.stringify(items));
   }, [items]);
 
-  const addToCart = (toy: ToyData, duration: string, startDate: string) => {
-    setItems(prevItems => {
-      // Créer un identifiant unique basé sur le toy.id et la durée
-      const itemId = `${toy.id}-${duration}`;
-      
-      // Chercher un item existant avec le même ID
-      const existingItem = prevItems.find(item => item.id === itemId);
-      
+  const addToCart = (toy: ToyData, duration: string, startDate: string, quantity: number = 1) => {
+    setItems((prevItems) => {
+      const toyKey = toy.backendId ?? String(toy.id);
+      const itemId = `${toyKey}-${duration}`;
+
+      const existingItem = prevItems.find((item) => item.id === itemId);
+
       if (existingItem) {
-        // Incrémenter la quantité de l'item existant
-        return prevItems.map(item =>
-          item.id === itemId
-            ? { ...item, startDate, quantity: item.quantity + 1 }
-            : item
+        return prevItems.map((item) =>
+          item.id === itemId ? { ...item, startDate, quantity: item.quantity + quantity } : item,
         );
       } else {
-        // Ajouter un nouvel item avec un ID unique
-        return [...prevItems, { 
-          id: itemId,
-          toy, 
-          duration, 
-          startDate, 
-          quantity: 1 
-        }];
+        return [
+          ...prevItems,
+          {
+            id: itemId,
+            toy,
+            duration,
+            startDate,
+            quantity: Math.max(1, quantity),
+          },
+        ];
       }
     });
   };
 
-  const updateItem = (itemId: string, updates: Partial<Pick<CartItem, 'duration' | 'startDate' | 'quantity'>>) => {
-    setItems(prevItems => prevItems.map(item => item.id === itemId ? { ...item, ...updates } : item));
+  const updateItem = (
+    itemId: string,
+    updates: Partial<Pick<CartItem, "duration" | "startDate" | "quantity">>,
+  ) => {
+    setItems((prevItems) => prevItems.map((item) => (item.id === itemId ? { ...item, ...updates } : item)));
   };
 
   const removeFromCart = (itemId: string) => {
-    setItems(prevItems => prevItems.filter(item => item.id !== itemId));
+    setItems((prevItems) => prevItems.filter((item) => item.id !== itemId));
   };
 
   const updateQuantity = (itemId: string, quantity: number) => {
@@ -85,44 +93,26 @@ export function CartProvider({ children }: { children: ReactNode }) {
       removeFromCart(itemId);
       return;
     }
-    
-    setItems(prevItems =>
-      prevItems.map(item =>
-        item.id === itemId ? { ...item, quantity } : item
-      )
-    );
+
+    setItems((prevItems) => prevItems.map((item) => (item.id === itemId ? { ...item, quantity } : item)));
   };
 
   const clearCart = () => {
     setItems([]);
   };
 
+  const getUnitPrice = (item: CartItem) => {
+    if (item.duration === "daily") return toNumber(item.toy.rentalPriceDaily);
+    if (item.duration === "weekly") return toNumber(item.toy.rentalPriceWeekly);
+    if (item.duration === "monthly") return toNumber(item.toy.rentalPriceMonthly);
+    return toNumber(item.toy.rentalPriceDaily);
+  };
+
   const getTotalPrice = () => {
-    return items.reduce((total, item) => {
-      // Préférer les champs de prix spécifiques si disponibles
-      let unitPrice = 0;
-      if (item.duration === 'daily' && typeof item.toy.rentalPriceDaily === 'number') {
-        unitPrice = item.toy.rentalPriceDaily;
-      } else if (item.duration === 'weekly' && typeof item.toy.rentalPriceWeekly === 'number') {
-        unitPrice = item.toy.rentalPriceWeekly;
-      } else if (item.duration === 'monthly' && typeof item.toy.rentalPriceMonthly === 'number') {
-        unitPrice = item.toy.rentalPriceMonthly;
-      } else {
-        // Fallback: parser le champ string "price"
-        unitPrice = parseFloat(item.toy.price?.replace(/[^\d.]/g, '') || '0');
-        // Appliquer un multiplicateur si la durée est sémantique
-        if (item.duration === 'weekly') unitPrice = unitPrice * 1; // déjà hebdo
-        else if (item.duration === 'monthly') unitPrice = unitPrice * (15 / 4.8); // approx depuis hebdo
-      }
-
-      const itemTotal = unitPrice * item.quantity;
-      return total + itemTotal;
-    }, 0);
+    return items.reduce((total, item) => total + getUnitPrice(item) * item.quantity, 0);
   };
 
-  const getTotalItems = () => {
-    return items.reduce((total, item) => total + item.quantity, 0);
-  };
+  const getTotalItems = () => items.reduce((total, item) => total + item.quantity, 0);
 
   return (
     <CartContext.Provider
@@ -145,7 +135,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 export function useCart() {
   const context = useContext(CartContext);
   if (context === undefined) {
-    throw new Error('useCart must be used within a CartProvider');
+    throw new Error("useCart must be used within a CartProvider");
   }
   return context;
 }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X, Calendar, Clock, MessageCircle, Check } from "lucide-react";
 import DatePicker from "./date-picker";
+import { formatDateInput } from "@/lib/date";
 
 interface ReservationPopupProps {
   isOpen: boolean;
@@ -123,7 +124,7 @@ Merci de confirmer cette réservation ! 🚀`;
             value={selectedDate}
             onChange={setSelectedDate}
             label="Date de début"
-            min={new Date().toISOString().split('T')[0]}
+            min={formatDateInput()}
             required
           />
 

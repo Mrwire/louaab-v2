@@ -21,58 +21,54 @@ import {
 const steps = [
   {
     number: "1",
-    title: "Choisissez vos jouets préférés",
-    description:
-      "Parcourez notre catalogue de plus de 500 jouets. Filtrez par âge, catégorie ou mot-clé. Ajoutez à votre panier les jouets qui plaisent à vos enfants ou choisissez un pack mensuel clé en main.",
+    title: "🧸 1. Choisissez vos jouets préférés",
+    description: `Parcourez notre catalogue régulièrement mis à jour et trouvez les jouets qui feront briller les yeux de vos enfants !
+Filtrez par âge, catégorie ou pack clé en main pour gagner du temps.`,
     icon: <Search size={48} className="text-mint" />,
     color: "from-mint/20 to-mint/10",
     features: [
-      "Catalogue régulièrement mis à jour",
-      "Filtres par âge et catégorie",
-      "Photos réelles des jouets",
-      "Avis et notes des parents",
+      "✔ Catalogue enrichi chaque semaine",
+      "✔ Photos réelles des jouets",
+      "✔ Avis et notes des parents",
     ],
   },
   {
     number: "2",
-    title: "Flexibilité totale",
-    description:
-      "Pas d'engagement, pas de frais cachés. Vous gardez les jouets aussi longtemps que vous voulez. Mettez en pause ou annulez quand vous le souhaitez. C'est vous qui décidez !",
+    title: "🔄 2. Flexibilité totale",
+    description: `Aucun engagement, aucune contrainte ! Gardez les jouets aussi longtemps que vous le souhaitez, ou faites une pause à tout moment.
+Chez Louaab, c’est vous qui décidez du rythme du jeu.`,
     icon: <Repeat size={48} className="text-peach" />,
     color: "from-peach/20 to-peach/10",
     features: [
-      "Sans engagement",
-      "Échanges illimités",
-      "Pause à tout moment",
-      "Annulation simple",
+      "✔ Sans abonnement obligatoire",
+      "✔ Échanges illimités",
+      "✔ Pause ou annulation simples",
     ],
   },
   {
     number: "3",
-    title: "Échangez dès que vous voulez",
-    description:
-      "Vos enfants s'en lassent ? Demandez un échange via le site ou WhatsApp. Nous récupérons les anciens jouets et livrons les nouveaux en même temps. Livraison et retour gratuits à Casa et Rabat.",
+    title: "📦 3. Échangez dès que vous voulez",
+    description: `Un jouet ne plaît plus ? Aucun souci ! Faites une demande d’échange via le site ou WhatsApp.
+Nous récupérons les anciens jouets et livrons les nouveaux en même temps.`,
     icon: <Package size={48} className="text-sky-blue" />,
     color: "from-sky-blue/20 to-sky-blue/10",
     features: [
-      "Livraison gratuite (Casa & Rabat)",
-      "Retour lors de la prochaine livraison",
-      "Créneaux horaires flexibles",
-      "Suivi en temps réel",
+      "✔ Livraison et retour gratuits (Casa & Rabat)",
+      "✔ Créneaux flexibles",
+      "✔ Suivi en temps réel",
     ],
   },
   {
     number: "4",
-    title: "Ou gardez-le pour toujours",
+    title: "❤ 4. Ou gardez-le pour toujours",
     description:
-      "Votre enfant adore un jouet et refuse de s'en séparer ? Aucun problème ! Vous pouvez l'acheter à un prix avantageux et le garder définitivement. Contactez-nous pour le prix de rachat.",
+      "Coup de cœur ? Vous pouvez racheter le jouet à un prix avantageux et le garder définitivement.",
     icon: <Heart size={48} className="text-coral" />,
     color: "from-coral/20 to-coral/10",
     features: [
-      "Prix de rachat avantageux",
-      "Option d'achat à tout moment",
-      "Déduction du prix déjà payé",
-      "Transfert de propriété immédiat",
+      "✔ Option d’achat à tout moment",
+      "✔ Déduction du prix déjà payé",
+      "✔ Transfert immédiat de propriété",
     ],
   },
 ];
@@ -349,30 +345,24 @@ export default function CommentCaMarchePage() {
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="overflow-hidden rounded-3xl bg-gradient-to-r from-mint via-fresh-green to-mint p-8 text-center md:p-12"
+          className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-mint via-sky-blue to-fresh-green p-8 text-center md:p-12"
         >
-          <h2 className="text-4xl font-bold text-white">
-            Prêt à commencer l&apos;aventure ?
-          </h2>
-          <p className="mx-auto mt-4 max-w-2xl text-lg text-white/90">
-            Parcourez notre catalogue et découvrez des centaines de jouets pour
-            vos enfants. Sans engagement, sans tracas, sans encombrement.
-          </p>
-          <div className="mt-10 flex flex-wrap justify-center gap-4">
-            <Link
-              href="/jouets"
-              className="inline-flex items-center gap-2 rounded-full bg-white px-8 py-4 text-sm font-bold uppercase tracking-wide text-mint shadow-lg transition hover:shadow-xl"
-            >
-              <ShoppingCart size={18} />
-              Découvrir les jouets
-            </Link>
-            <Link
-              href="/nos-packs"
-              className="inline-flex items-center gap-2 rounded-full border-2 border-white bg-transparent px-8 py-4 text-sm font-bold uppercase tracking-wide text-white transition hover:bg-white hover:text-mint"
-            >
-              <Package size={18} />
-              Voir les packs
-            </Link>
+          <div className="pointer-events-none absolute inset-0 opacity-25 mix-blend-screen bg-[url('/file.svg')] bg-cover bg-center" />
+          <div className="pointer-events-none absolute -top-12 -right-16 h-48 w-48 rounded-full bg-white/40 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-16 -left-20 h-64 w-64 rounded-full bg-emerald-400/30 blur-[120px]" />
+          <div className="relative z-10">
+            <h2 className="text-3xl md:text-4xl font-bold text-white">
+              Louer des jouets, c’est simple, flexible et éco-responsable 🌿 — rejoignez la famille Louaab dès aujourd’hui !
+            </h2>
+            <div className="mt-8 flex justify-center">
+              <Link
+                href="/jouets"
+                className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-bold uppercase tracking-wide text-mint shadow-lg transition hover:shadow-xl"
+              >
+                <ShoppingCart size={18} />
+                Découvrir les jouets
+              </Link>
+            </div>
           </div>
         </motion.div>
       </section>

@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { PageShell } from "@/components/page-shell";
 import PackReservationModal from "@/components/pack-reservation-modal";
-import { PackManager, Pack } from "@/lib/packs";
+import { Pack, PackManager } from "@/lib/packs";
+
+// URL du backend API
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://louaab.ma/api';
 import {
   Check,
   Sparkles,
@@ -92,20 +95,116 @@ const item = {
   show: { opacity: 1, y: 0, transition: { duration: 0.6 } },
 };
 
+const mapPackFromApi = (b: any): Pack => ({
+  id: b.id,
+  name: b.name,
+  slug: b.slug,
+  description: b.description || "",
+  priceMonthly: Number(b.price || 0),
+  toyCount: Number(b.toyCount || 0),
+  durationMonths: Math.max(1, Math.round((b.durationDays || 30) / 30)),
+  depositAmount: 0,
+  swapIncluded: true,
+  swapFrequencyDays: 30,
+  citiesAvailable: [],
+  isActive: !!b.isActive,
+  displayOrder: Number(b.displayOrder || 0),
+  badge: undefined,
+  color: "mint",
+  icon: b.icon || "�YZ?",
+  ageRange: "",
+  features: (() => {
+    try {
+      const f =
+        typeof b.features === "string"
+          ? JSON.parse(b.features)
+          : b.features || [];
+      return Array.isArray(f) ? f : [];
+    } catch {
+      return [];
+    }
+  })(),
+});
+
 export default function NosPacksPage() {
   const [subscriptionPlans, setSubscriptionPlans] = useState<Pack[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<string>("");
   const [selectedPack, setSelectedPack] = useState<Pack | null>(null);
   const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
-  // Charger les packs depuis le service
+  const loadPacks = useCallback(
+    async (options?: { silent?: boolean }) => {
+      const silent = options?.silent ?? false;
+      silent ? setIsRefreshing(true) : setIsLoading(true);
+      setError(null);
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/packs/all`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+        });
+        const body = await res.json().catch(() => ({}));
+
+        if (!res.ok || !Array.isArray(body?.data)) {
+          throw new Error(body?.message || "Impossible de charger les packs");
+        }
+
+        const packs: Pack[] = body.data.map(mapPackFromApi);
+        setSubscriptionPlans(packs);
+        setSelectedPlan((prev) => {
+          if (prev && packs.some((pack) => pack.id === prev)) {
+            return prev;
+          }
+          return packs[0]?.id || "";
+        });
+        setLastUpdated(new Date().toISOString());
+      } catch (err) {
+        console.error("Erreur lors du chargement des packs:", err);
+        const fallback = PackManager.getAllPacks();
+        if (fallback.length > 0) {
+          setSubscriptionPlans(fallback);
+          setSelectedPlan((prev) => {
+            if (prev && fallback.some((pack) => pack.id === prev)) {
+              return prev;
+            }
+            return fallback[0]?.id || "";
+          });
+        } else {
+          setSubscriptionPlans([]);
+          setSelectedPlan("");
+        }
+        setLastUpdated(null);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Impossible de charger les packs depuis l'API",
+        );
+      } finally {
+        silent ? setIsRefreshing(false) : setIsLoading(false);
+      }
+    },
+    []
+  );
+
   useEffect(() => {
-    const activePacks = PackManager.getActivePacks();
-    setSubscriptionPlans(activePacks);
-    if (activePacks.length > 0) {
-      setSelectedPlan(activePacks[0].id);
-    }
-  }, []);
+    loadPacks();
+    const handleVisibility = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        loadPacks({ silent: true });
+      }
+    };
+    window.addEventListener("focus", handleVisibility);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.removeEventListener("focus", handleVisibility);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [loadPacks]);
 
   return (
     <PageShell>
@@ -144,22 +243,69 @@ export default function NosPacksPage() {
 
       {/* Subscription Plans */}
       <section className="mx-auto max-w-7xl px-4 py-16">
-        <motion.div
-          variants={container}
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.3 }}
-          className="grid gap-8 md:grid-cols-3"
-        >
-          {subscriptionPlans.map((plan) => (
-            <motion.div
-              key={plan.id}
-              variants={item}
-              className={`relative overflow-hidden rounded-3xl bg-white p-8 shadow-xl transition hover:-translate-y-2 ${
-                plan.badge ? "ring-4 ring-mint" : "shadow-mist/30"
-              }`}
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wide text-charcoal">
+              Nos packs les plus demandés
+            </p>
+            {lastUpdated ? (
+              <p className="text-xs text-slate">
+                Dernière mise à jour&nbsp;:{" "}
+                {new Date(lastUpdated).toLocaleString("fr-FR")}
+              </p>
+            ) : null}
+            {!lastUpdated && isLoading && (
+              <p className="text-xs text-slate">Chargement des tarifs...</p>
+            )}
+            {error && !lastUpdated && !isLoading && (
+              <p className="text-xs text-coral">{error}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {error && lastUpdated && (
+              <span className="text-xs text-coral max-w-[220px] text-right">
+                {error}
+              </span>
+            )}
+            <button
+              onClick={() => loadPacks({ silent: true })}
+              disabled={isRefreshing || isLoading}
+              className="rounded-full border border-mint px-4 py-2 text-xs font-semibold uppercase tracking-wide text-mint transition hover:bg-mint/10 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {/* Badge */}
+              {isRefreshing || (isLoading && subscriptionPlans.length > 0)
+                ? "Actualisation..."
+                : "Actualiser les prix"}
+            </button>
+          </div>
+        </div>
+
+        {subscriptionPlans.length === 0 ? (
+          <div className="rounded-3xl bg-white p-10 text-center shadow-sm">
+            {isLoading ? (
+              <p className="text-slate">Chargement des packs...</p>
+            ) : (
+              <p className="text-slate">
+                Aucun pack n&apos;est disponible pour le moment.
+              </p>
+            )}
+          </div>
+        ) : (
+          <motion.div
+            variants={container}
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.3 }}
+            className="grid gap-8 md:grid-cols-3"
+          >
+            {subscriptionPlans.map((plan) => (
+              <motion.div
+                key={plan.id}
+                variants={item}
+                className={`relative overflow-hidden rounded-3xl bg-white p-8 shadow-xl transition hover:-translate-y-2 ${
+                  plan.badge ? "ring-4 ring-mint" : "shadow-mist/30"
+                }`}
+              >
+                {/* Badge */}
               {plan.badge && (
                 <div className="absolute left-0 right-0 top-0 bg-gradient-to-r from-mint to-fresh-green py-2 text-center text-sm font-bold uppercase tracking-wide text-white">
                   ⭐ {plan.badge}
@@ -220,9 +366,10 @@ export default function NosPacksPage() {
                   <ArrowRight className="ml-2 inline" size={16} />
                 </button>
               </div>
-            </motion.div>
-          ))}
-        </motion.div>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
 
         {/* Trust Message */}
         <motion.div
@@ -401,10 +548,16 @@ export default function NosPacksPage() {
             name: selectedPack.name,
             price: `${selectedPack.priceMonthly} MAD/mois`,
             description: selectedPack.description,
-            features: selectedPack.features
+            features: selectedPack.features,
+            durationLabel:
+              selectedPack.durationMonths > 1
+                ? `${selectedPack.durationMonths} mois`
+                : "1 mois",
+            durationDays: selectedPack.durationMonths * 30,
           }}
         />
       )}
     </PageShell>
   );
 }
+

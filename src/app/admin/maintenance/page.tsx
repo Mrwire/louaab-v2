@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -14,7 +14,7 @@ export default function MaintenancePage() {
   const { showSuccess, showError } = useNotifications();
 
   useEffect(() => {
-    // Vérifier l'authentification
+    // Vérifier ’uthentification
     if (!AuthManager.isAuthenticated()) {
       router.push("/admin/login");
       return;
@@ -57,6 +57,7 @@ export default function MaintenancePage() {
         showError("Erreur", "Impossible de changer le mode maintenance");
       }
     } catch (error) {
+      console.error("Erreur lors du changement du mode maintenance:", error);
       showError("Erreur", "Erreur lors du changement du mode maintenance");
     } finally {
       setIsToggling(false);
@@ -92,7 +93,7 @@ export default function MaintenancePage() {
               <div>
                 <h1 className="text-xl font-bold text-charcoal">Mode Maintenance</h1>
                 <p className="text-sm text-gray-600">
-                  Gérer l'accessibilité du site
+                  Gérer ’ccessibilité du site
                 </p>
               </div>
             </div>
@@ -180,7 +181,7 @@ export default function MaintenancePage() {
                   <li className="flex items-start gap-2">
                     <span className="text-coral mt-1">•</span>
                     <span>
-                      N'oubliez pas de désactiver le mode après les mises à jour
+                      ’ubliez pas de désactiver le mode après les mises à jour
                     </span>
                   </li>
                 </ul>
@@ -208,13 +209,13 @@ export default function MaintenancePage() {
                   <li className="flex items-start gap-2">
                     <span className="text-mint mt-1">•</span>
                     <span>
-                      Activez la maintenance avant d'effectuer des mises à jour importantes
+                      Activez la maintenance avant ’ffectuer des mises à jour importantes
                     </span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-mint mt-1">•</span>
                     <span>
-                      Les administrateurs gardent toujours l'accès en mode maintenance
+                      Les administrateurs gardent toujours ’ccès en mode maintenance
                     </span>
                   </li>
                 </ul>
@@ -233,18 +234,18 @@ export default function MaintenancePage() {
           </div>
           <div className="space-y-3 text-sm text-slate">
             <p>
-              <strong className="text-charcoal">Quand l'utiliser :</strong>{" "}
+              <strong className="text-charcoal">Quand ’tiliser :</strong>{" "}
               Utilisez ce mode lors de mises à jour importantes, corrections de bugs,
               ou maintenance de la base de données.
             </p>
             <p>
               <strong className="text-charcoal">Durée recommandée :</strong>{" "}
-              Essayez de minimiser la durée de maintenance pour réduire l'impact
+              Essayez de minimiser la durée de maintenance pour réduire ’mpact
               sur vos utilisateurs.
             </p>
             <p>
               <strong className="text-charcoal">Communication :</strong>{" "}
-              Informez vos utilisateurs à l'avance si possible via vos réseaux sociaux
+              Informez vos utilisateurs à ’vance si possible via vos réseaux sociaux
               ou newsletter.
             </p>
           </div>
@@ -253,3 +254,4 @@ export default function MaintenancePage() {
     </div>
   );
 }
+

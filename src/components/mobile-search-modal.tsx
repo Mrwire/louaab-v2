@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Search, X, ArrowLeft } from "lucide-react";
-import { loadToysData, ToyData } from "@/lib/toys-data";
+import { getAllToys, ToyData } from "@/lib/toys-data";
 
 interface MobileSearchModalProps {
   isOpen: boolean;
@@ -19,8 +19,7 @@ export default function MobileSearchModal({ isOpen, onClose }: MobileSearchModal
   // Charger les jouets
   useEffect(() => {
     const fetchToys = async () => {
-      const toysMapping = await loadToysData();
-      const allToys = Object.values(toysMapping.toys);
+      const allToys = await getAllToys();
       setToys(allToys);
     };
     fetchToys();
@@ -136,7 +135,7 @@ export default function MobileSearchModal({ isOpen, onClose }: MobileSearchModal
             
             {searchResults.map((toy) => (
               <Link
-                key={toy.id}
+                key={toy.backendId ?? toy.id}
                 href={`/jouets/${toy.slug}`}
                 className="flex items-center gap-3 p-4 bg-white hover:bg-mint/5 transition active:bg-mint/10"
                 onClick={onClose}

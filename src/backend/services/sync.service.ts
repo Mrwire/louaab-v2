@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, DeepPartial } from 'typeorm';
 import { Toy } from '../entities/toy.entity';
 import { ToyCategory } from '../entities/toy-category.entity';
 import { ToyImage } from '../entities/toy-image.entity';
@@ -27,6 +27,14 @@ interface MappingToy {
 }
 
 interface ToysMapping { toys: MappingToy[] }
+
+const slugify = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)+/g, '');
 
 @Injectable()
 export class SyncService {
@@ -59,7 +67,14 @@ export class SyncService {
     return null;
   }
 
-  async syncToysFromMapping(): Promise<{ created: number; updated: number }>{
+  private resolvePackType(value?: string): PackType {
+    if (!value) return PackType.CUSTOM;
+    const normalized = value.toLowerCase() as PackType;
+    const allowed = Object.values(PackType) as PackType[];
+    return allowed.includes(normalized) ? normalized : PackType.CUSTOM;
+  }
+
+  async syncToysFromMapping(): Promise<{ created: number; updated: number }> {
     const file = path.join(process.cwd(), 'public', 'toys', 'toys-mapping.json');
     const raw = fs.readFileSync(file, 'utf-8').replace(/^\uFEFF/, '').trim();
     const mapping: ToysMapping = JSON.parse(raw);
@@ -67,18 +82,30 @@ export class SyncService {
     let created = 0, updated = 0;
 
     for (const m of mapping.toys) {
-      const catNames = (m.category || '').split(',').map(s => s.trim()).filter(Boolean);
+      const catNames = (m.category || '')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
       const categories: ToyCategory[] = [];
       if (catNames.length) {
         const existing = await this.catRepo.find({ where: { name: In(catNames) } });
+        const categoryMap = new Map(existing.map(cat => [cat.name, cat]));
+
         for (const name of catNames) {
-          let c = existing.find(e => e.name === name);
-          if (!c) {
-            c = this.catRepo.create({ name, slug: name.toLowerCase().replace(/[^a-z0-9]+/g,'-'), isActive: true, displayOrder: 0 } as any);
-            await this.catRepo.save(c);
-            existing.push(c);
+          let category = categoryMap.get(name);
+          if (!category) {
+            const payload: DeepPartial<ToyCategory> = {
+              name,
+              slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+              isActive: true,
+              displayOrder: 0,
+            };
+            category = await this.catRepo.save(this.catRepo.create(payload));
+            categoryMap.set(name, category);
           }
-          categories.push(c);
+          if (category) {
+            categories.push(category);
+          }
         }
       }
 
@@ -101,11 +128,18 @@ export class SyncService {
       const daily = Math.round((weekly / 4.8) * 100) / 100;
       const monthly = Math.round((weekly * (15/4.8)) * 100) / 100;
 
-      let toy = await this.toyRepo.findOne({ where: { slug: m.slug }, relations: ['images','categories'] });
+      const toySku = m.slug || `toy-${m.id}`;
+      const toySlug = slugify(m.slug || m.name || toySku);
+      // Cherche d'abord par SKU puis par slug pour éviter les doublons uniques
+      let toy = await this.toyRepo.findOne({
+        where: [{ sku: toySku }, { slug: toySlug }],
+        relations: ['images', 'categories'],
+      });
       if (!toy) {
-        toy = this.toyRepo.create({
+        const payload: DeepPartial<Toy> = {
+          sku: toySku,
+          slug: toySlug,
           name: m.name,
-          slug: m.slug,
           description: m.description,
           videoUrl: m.videoUrl,
           rentalPriceWeekly: weekly,
@@ -115,8 +149,8 @@ export class SyncService {
           availableQuantity: stockQty,
           isActive: true,
           categories,
-        } as any);
-        await this.toyRepo.save(toy);
+        };
+        toy = await this.toyRepo.save(this.toyRepo.create(payload));
         created++;
       } else {
         toy.name = m.name;
@@ -128,15 +162,28 @@ export class SyncService {
         toy.stockQuantity = stockQty;
         toy.availableQuantity = Math.max(toy.availableQuantity || 0, stockQty);
         toy.categories = categories;
-        await this.toyRepo.save(toy);
+        toy.slug = toy.slug || toySlug;
+        toy = await this.toyRepo.save(toy);
         updated++;
       }
 
+      if (!toy) {
+        continue;
+      }
+
       if (m.image) {
-        const hasPrimary = (toy.images || []).some(img => img.url === m.image);
-        if (!hasPrimary) {
-          const img = this.imgRepo.create({ toy, url: m.image, altText: m.name, isPrimary: true, displayOrder: 0 } as any);
-          await this.imgRepo.save(img);
+        const existingImage = await this.imgRepo.findOne({
+          where: { toy: { id: toy.id }, url: m.image } as any,
+        });
+        if (!existingImage) {
+          const imagePayload: DeepPartial<ToyImage> = {
+            toy,
+            url: m.image,
+            altText: m.name,
+            isPrimary: true,
+            displayOrder: 0,
+          };
+          await this.imgRepo.save(this.imgRepo.create(imagePayload));
         }
       }
     }
@@ -144,7 +191,7 @@ export class SyncService {
     return { created, updated };
   }
 
-  async syncPacksFromDefault(): Promise<{ created: number; updated: number }>{
+  async syncPacksFromDefault(): Promise<{ created: number; updated: number }> {
     const file = path.join(process.cwd(), 'public', 'packs', 'default-packs.json');
     const raw = fs.readFileSync(file, 'utf-8').replace(/^\uFEFF/, '').trim();
     const items: Array<{
@@ -154,10 +201,10 @@ export class SyncService {
     let created = 0, updated = 0;
     for (const p of items) {
       let pack = await this.packRepo.findOne({ where: { slug: p.slug } });
-      const data: Partial<Pack> = {
+      const data: DeepPartial<Pack> = {
         name: p.name,
         slug: p.slug,
-        type: (p.type?.toLowerCase() as PackType) || PackType.CUSTOM,
+        type: this.resolvePackType(p.type),
         description: p.description,
         price: p.price,
         toyCount: p.toyCount,
@@ -168,8 +215,7 @@ export class SyncService {
         isActive: p.isActive ?? true,
       };
       if (!pack) {
-        pack = this.packRepo.create(data as any);
-        await this.packRepo.save(pack);
+        pack = await this.packRepo.save(this.packRepo.create(data));
         created++;
       } else {
         this.packRepo.merge(pack, data);

@@ -29,7 +29,7 @@ export interface DashboardMetrics {
 }
 
 export class DashboardMetricsCalculator {
-  static calculateMetrics(orders: Order[], packs: Pack[]): DashboardMetrics {
+  static calculateMetrics(orders: Order[], _packs: Pack[]): DashboardMetrics {
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();

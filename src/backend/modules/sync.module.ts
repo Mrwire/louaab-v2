@@ -6,12 +6,12 @@ import { Toy } from '../entities/toy.entity';
 import { ToyCategory } from '../entities/toy-category.entity';
 import { ToyImage } from '../entities/toy-image.entity';
 import { AgeRange } from '../entities/age-range.entity';
+import { Pack } from '../entities/pack.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Toy, ToyCategory, ToyImage, AgeRange])],
+  imports: [TypeOrmModule.forFeature([Toy, ToyCategory, ToyImage, AgeRange, Pack])],
   controllers: [SyncController],
   providers: [SyncService],
   exports: [SyncService],
 })
 export class SyncModule {}
-

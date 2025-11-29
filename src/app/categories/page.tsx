@@ -8,10 +8,8 @@ export const metadata = {
   description: 'Explorez toutes nos catégories de jouets disponibles à la location',
 };
 
-// URL du backend API - utiliser une URL relative pour éviter Mixed Content
-const API_BASE_URL = typeof window !== 'undefined' 
-  ? (process.env.NEXT_PUBLIC_API_URL || '/api')
-  : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api');
+// URL du backend API
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://louaab.ma/api';
 
 interface Category {
   id: string;

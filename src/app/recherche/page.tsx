@@ -99,7 +99,7 @@ function SearchContent() {
         ) : toys.length > 0 ? (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {toys.map((toy) => (
-              <ToyCard key={toy.id} toy={toy} />
+              <ToyCard key={toy.backendId ?? toy.id} toy={toy} />
             ))}
           </div>
         ) : query ? (

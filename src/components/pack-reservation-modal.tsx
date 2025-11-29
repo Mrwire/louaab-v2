@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from 'react';
-import { X, Calendar, Clock, User, Phone, Mail, CheckCircle } from 'lucide-react';
-import { usePackReservations } from '@/contexts/pack-reservations';
-import DatePicker from './date-picker';
+import { useMemo, useState } from "react";
+import { X, Calendar, CheckCircle, Loader2 } from "lucide-react";
+import { usePackReservations } from "@/contexts/pack-reservations";
+import DatePicker from "./date-picker";
 
 interface PackReservationModalProps {
   isOpen: boolean;
@@ -13,251 +13,286 @@ interface PackReservationModalProps {
     price: string;
     description: string;
     features: string[];
+    durationLabel?: string;
+    durationDays?: number;
   };
 }
 
-export default function PackReservationModal({ isOpen, onClose, pack }: PackReservationModalProps) {
+const formatDateLabel = (value: string) => {
+  if (!value) return "";
+  return new Date(`${value}T00:00:00`).toLocaleDateString("fr-FR", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+};
+
+export default function PackReservationModal({
+  isOpen,
+  onClose,
+  pack,
+}: PackReservationModalProps) {
   const { addReservation } = usePackReservations();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [formData, setFormData] = useState({
-    customerName: '',
-    customerPhone: '',
-    customerEmail: '',
-    startDate: '',
-    endDate: '',
-    duration: '1 semaine',
-    notes: ''
-  });
+  const [startDate, setStartDate] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [notes, setNotes] = useState("");
+  const isButtonDisabled =
+    isSubmitting || !startDate || !customerName.trim() || !customerPhone.trim();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!formData.customerName || !formData.customerPhone || !formData.startDate) {
-      alert('Veuillez remplir au moins le nom, le téléphone et la date de début');
+  const todayIso = useMemo(
+    () => new Date().toISOString().split("T")[0],
+    []
+  );
+
+  const computedEndDate = useMemo(() => {
+    if (!startDate || !pack.durationDays) return "";
+    const end = new Date(`${startDate}T00:00:00`);
+    end.setDate(end.getDate() + pack.durationDays);
+    return end.toISOString().split("T")[0];
+  }, [startDate, pack.durationDays]);
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!startDate || !customerName.trim() || !customerPhone.trim()) {
+      alert("Merci de renseigner le nom, le téléphone et la date de début.");
       return;
     }
 
     setIsSubmitting(true);
-
     try {
       addReservation({
         packName: pack.name,
         packPrice: pack.price,
         packDescription: pack.description,
-        customerName: formData.customerName,
-        customerPhone: formData.customerPhone,
-        customerEmail: formData.customerEmail,
-        startDate: formData.startDate,
-        endDate: formData.endDate,
-        duration: formData.duration,
-        status: 'pending',
-        notes: formData.notes
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        customerEmail: customerEmail.trim(),
+        startDate,
+        endDate: computedEndDate,
+        duration: pack.durationLabel || "Pack LOUAAB",
+        status: "pending",
+        notes,
       });
 
       setIsSubmitted(true);
       setTimeout(() => {
         setIsSubmitted(false);
+        setStartDate("");
+        setCustomerName("");
+        setCustomerPhone("");
+        setCustomerEmail("");
+        setNotes("");
         onClose();
-        setFormData({
-          customerName: '',
-          customerPhone: '',
-          customerEmail: '',
-          startDate: '',
-          endDate: '',
-          duration: '1 semaine',
-          notes: ''
-        });
       }, 2000);
-
     } catch (error) {
-      console.error('Erreur lors de la réservation:', error);
-      alert('Une erreur est survenue. Veuillez réessayer.');
+      console.error("Erreur lors de la réservation:", error);
+      alert("Une erreur est survenue. Veuillez réessayer.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleClose = () => {
-    if (!isSubmitting) {
-      onClose();
-      setFormData({
-        customerName: '',
-        customerPhone: '',
-        customerEmail: '',
-        startDate: '',
-        endDate: '',
-        duration: '1 semaine',
-        notes: ''
-      });
-    }
+    if (isSubmitting) return;
+    setStartDate("");
+    setCustomerName("");
+    setCustomerPhone("");
+    setCustomerEmail("");
+    setNotes("");
+    setIsSubmitted(false);
+    onClose();
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-charcoal">Réserver le pack {pack.name}</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur">
+      <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wide text-mint">
+              Réservation de pack
+            </p>
+            <h2 className="text-2xl font-bold text-charcoal">
+              {pack.name}
+            </h2>
+          </div>
           <button
             onClick={handleClose}
             disabled={isSubmitting}
-            className="rounded-lg bg-gray-100 p-2 text-gray-600 hover:bg-gray-200 disabled:opacity-50"
+            className="rounded-lg bg-gray-100 p-2 text-gray-600 transition hover:bg-gray-200 disabled:opacity-50"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {isSubmitted ? (
-          <div className="text-center py-8">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-              <CheckCircle className="h-8 w-8 text-green-600" />
+          <div className="py-10 text-center">
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-green-100">
+              <CheckCircle className="h-10 w-10 text-green-600" />
             </div>
-            <h3 className="text-xl font-bold text-charcoal mb-2">Réservation confirmée !</h3>
+            <h3 className="text-xl font-bold text-charcoal mb-2">
+              Réservation confirmée !
+            </h3>
             <p className="text-slate">
-              Votre demande de réservation pour le pack <strong>{pack.name}</strong> a été enregistrée.
-            </p>
-            <p className="text-sm text-slate mt-2">
-              Notre équipe vous contactera dans les 24h pour finaliser votre réservation.
+              Votre demande pour le <strong>{pack.name}</strong> a bien été
+              enregistrée. Notre équipe vous contactera sous 24h.
             </p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Pack Info */}
-            <div className="rounded-xl bg-gray-50 p-4">
-              <h3 className="font-semibold text-charcoal mb-2">{pack.name}</h3>
-              <p className="text-sm text-slate mb-2">{pack.description}</p>
-              <div className="text-lg font-bold text-mint">{pack.price}</div>
+          <form onSubmit={handleSubmit} className="space-y-8">
+            <div className="rounded-2xl bg-gray-50 p-4">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate">
+                    Pack sélectionné
+                  </p>
+                  <h3 className="text-xl font-bold text-charcoal">
+                    {pack.name}
+                  </h3>
+                  <p className="text-sm text-slate">{pack.description}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-slate">Tarif</p>
+                  <p className="text-2xl font-bold text-mint">{pack.price}</p>
+                  {pack.durationLabel && (
+                    <p className="text-xs text-slate">
+                      Durée : {pack.durationLabel}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {pack.features?.length > 0 && (
+                <ul className="mt-4 grid gap-2 text-sm text-charcoal md:grid-cols-2">
+                  {pack.features.map((feature, index) => (
+                    <li
+                      key={index}
+                      className="flex items-center gap-2 text-slate"
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full bg-mint" />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
-            {/* Customer Info */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nom complet *
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    value={formData.customerName}
-                    onChange={(e) => setFormData({...formData, customerName: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-mint focus:border-mint pl-10"
-                    placeholder="Ex: Sara Dupont"
-                  />
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+            <div className="space-y-6">
+              <div className="rounded-2xl border border-mist/80 p-4 space-y-4">
+                <p className="text-sm font-semibold text-gray-700">
+                  Coordonnées
+                </p>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="col-span-2">
+                    <label className="mb-1 block text-sm font-medium text-gray-700">
+                      Nom complet *
+                    </label>
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={(event) => setCustomerName(event.target.value)}
+                      placeholder="Ex: Sara Dupont"
+                      required
+                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm shadow-sm focus:border-mint focus:ring-mint"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">
+                      Téléphone *
+                    </label>
+                    <input
+                      type="tel"
+                      value={customerPhone}
+                      onChange={(event) => setCustomerPhone(event.target.value)}
+                      placeholder="Ex: +212 6 XX XX XX XX"
+                      required
+                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm shadow-sm focus:border-mint focus:ring-mint"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      value={customerEmail}
+                      onChange={(event) => setCustomerEmail(event.target.value)}
+                      placeholder="Ex: sara@email.com"
+                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm shadow-sm focus:border-mint focus:ring-mint"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Téléphone *
+              <div className="rounded-2xl border border-mist/80 p-4">
+                <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-700">
+                  <Calendar className="h-4 w-4 text-mint" />
+                  Date de début *
                 </label>
-                <div className="relative">
-                  <input
-                    type="tel"
-                    required
-                    value={formData.customerPhone}
-                    onChange={(e) => setFormData({...formData, customerPhone: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-mint focus:border-mint pl-10"
-                    placeholder="Ex: +212 6 XX XX XX XX"
-                  />
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email (optionnel)
-              </label>
-              <div className="relative">
-                <input
-                  type="email"
-                  value={formData.customerEmail}
-                  onChange={(e) => setFormData({...formData, customerEmail: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-mint focus:border-mint pl-10"
-                  placeholder="Ex: sara@email.com"
+                <DatePicker
+                  value={startDate}
+                  onChange={(date) => setStartDate(date)}
+                  label="Sélectionner une date"
+                  min={todayIso}
+                  required
                 />
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                {pack.durationLabel && (
+                  <p className="mt-3 text-sm text-slate">
+                    Ce pack couvre <strong>{pack.durationLabel}</strong>
+                    {computedEndDate &&
+                      ` – retour prévu le ${formatDateLabel(computedEndDate)}.`}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Notes (optionnel)
+                </label>
+                <textarea
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                  rows={4}
+                  className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm shadow-sm focus:border-mint focus:ring-mint"
+                  placeholder="Informations complémentaires, remarques..."
+                />
               </div>
             </div>
 
-            {/* Dates */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <DatePicker
-                value={formData.startDate}
-                onChange={(date) => setFormData({...formData, startDate: date})}
-                label="Date de début"
-                min={new Date().toISOString().split('T')[0]}
-                required
-              />
-
-              <DatePicker
-                value={formData.endDate}
-                onChange={(date) => setFormData({...formData, endDate: date})}
-                label="Date de fin"
-                min={formData.startDate || new Date().toISOString().split('T')[0]}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Durée
-              </label>
-              <select
-                value={formData.duration}
-                onChange={(e) => setFormData({...formData, duration: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-mint focus:border-mint"
-              >
-                <option value="1 semaine">1 semaine</option>
-                <option value="2 semaines">2 semaines</option>
-                <option value="1 mois">1 mois</option>
-                <option value="2 mois">2 mois</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Notes (optionnel)
-              </label>
-              <textarea
-                value={formData.notes}
-                onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-mint focus:border-mint"
-                placeholder="Informations supplémentaires..."
-              />
-            </div>
-
-            <div className="flex gap-3 pt-4">
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-mint px-4 py-3 font-medium text-white hover:bg-mint/90 disabled:opacity-50"
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                    Traitement...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="h-4 w-4" />
-                    Confirmer la réservation
-                  </>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={handleClose}
-                disabled={isSubmitting}
-                className="px-4 py-3 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
-              >
-                Annuler
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={isButtonDisabled}
+              className={`
+                flex w-full items-center justify-center gap-3 
+                rounded-2xl px-6 py-3 text-sm font-bold uppercase tracking-wide 
+                text-white shadow-xl transition-all duration-200 
+                focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2
+                ${isButtonDisabled ? "cursor-not-allowed opacity-70 bg-gray-300 text-gray-600" : "hover:scale-[1.01]"}
+              `}
+              style={
+                isButtonDisabled
+                  ? undefined
+                  : {
+                      background:
+                        "linear-gradient(135deg, #22c55e 0%, #16a34a 50%, #0f766e 100%)",
+                    }
+              }
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Envoi...
+                </>
+              ) : (
+                "Confirmer la réservation"
+              )}
+            </button>
           </form>
         )}
       </div>

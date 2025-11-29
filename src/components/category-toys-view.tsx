@@ -49,7 +49,7 @@ export default function CategoryToysView({ toys }: CategoryToysViewProps) {
       {viewMode === "grid" && (
         <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
           {toys.map((toy, index) => (
-            <ToyCardWithReservation key={toy.id} toy={toy} priority={index < 6} />
+            <ToyCardWithReservation key={toy.backendId ?? toy.id} toy={toy} priority={index < 6} />
           ))}
         </div>
       )}
@@ -59,7 +59,7 @@ export default function CategoryToysView({ toys }: CategoryToysViewProps) {
         <div className="space-y-4">
           {toys.map((toy) => (
             <div
-              key={toy.id}
+              key={toy.backendId ?? toy.id}
               className="flex gap-4 rounded-2xl border border-mist bg-white p-4 transition hover:shadow-lg"
             >
               {/* Image */}

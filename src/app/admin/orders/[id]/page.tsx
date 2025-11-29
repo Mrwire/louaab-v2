@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowLeft,
   User,
@@ -11,7 +11,6 @@ import {
   Calendar,
   Clock,
   Package,
-  Truck,
   CheckCircle,
   Edit,
   Printer,
@@ -125,8 +124,7 @@ const statusConfig = {
 };
 
 export default function AdminOrderDetailPage() {
-  const [currentStatus, setCurrentStatus] = useState(orderDetail.status);
-  const [showStatusModal, setShowStatusModal] = useState(false);
+  const currentStatus = orderDetail.status;
 
   return (
     <div className="min-h-screen bg-mist/30 p-6">
@@ -232,9 +230,11 @@ export default function AdminOrderDetailPage() {
                     key={item.id}
                     className="flex items-center gap-4 rounded-xl border border-mist p-4"
                   >
-                    <img
+                    <Image
                       src={item.toy.imageUrl}
                       alt={item.toy.name}
+                      width={80}
+                      height={80}
                       className="h-20 w-20 rounded-lg object-cover"
                     />
                     <div className="flex-1">

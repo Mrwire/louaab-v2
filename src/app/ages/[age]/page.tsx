@@ -1,18 +1,16 @@
-import Link from 'next/link';
-import Image from 'next/image';
-import { PageShell } from '@/components/page-shell';
-import { getAllToys } from '@/lib/toys-data';
+import Image from "next/image";
+import Link from "next/link";
 
-// URL du backend API - relative par défaut côté client
-const API_BASE_URL = typeof window !== 'undefined'
-  ? (process.env.NEXT_PUBLIC_API_URL || '/api')
-  : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api');
-
+import { PageShell } from "@/components/page-shell";
+import { API_BASE_URL } from "@/lib/api/config";
+import ToyCardWithReservation from "@/components/toy-card-with-reservation";
+import { getAllToys } from "@/lib/toys-data";
+import type { ToyData } from "@/lib/toys-data";
 interface AgeRange {
   id: string;
   label: string;
   slug: string;
-  iconType: 'emoji' | 'upload' | 'icon';
+  iconType: "emoji" | "upload" | "icon";
   icon: string;
   iconUrl?: string;
   ageMin: number;
@@ -21,111 +19,187 @@ interface AgeRange {
   isActive: boolean;
 }
 
-// Mappe une chaîne d'âge (ex: "3-6 ans", "12+ ans") vers une tranche DB
-function mapAgeToAgeRange(age: string, ageRanges: AgeRange[]): AgeRange | null {
-  if (!age) return null;
+type ToyWithAge = ToyData & { ageMin?: number | null; ageMax?: number | null };
 
-  const ageLower = age.toLowerCase().trim().replace(/\s+/g, ' ');
-  const numbers = ageLower.match(/\d+/g);
-  if (!numbers || numbers.length === 0) return null;
+const normalizeToSlug = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "");
 
-  const firstNum = parseInt(numbers[0]);
-  const secondNum = numbers.length > 1 ? parseInt(numbers[1]) : null;
+const toMonths = (value: number) => value * 12;
 
-  let ageMinMonths: number | null = null;
-  let ageMaxMonths: number | null = null;
+const formatAgeLabelFromBounds = (minMonths: number, maxMonths: number | null) => {
+  const fmt = (m: number) => {
+    if (m < 12) return `${m} mois`;
+    const years = m / 12;
+    return Number.isInteger(years) ? `${years} ans` : `${years.toFixed(1)} ans`;
+  };
+  if (maxMonths === null) return `${fmt(minMonths)} +`;
+  if (maxMonths === minMonths) return fmt(minMonths);
+  return `${fmt(minMonths)} - ${fmt(maxMonths)}`;
+};
 
-  if (ageLower.includes('mois')) {
-    ageMinMonths = firstNum;
-    ageMaxMonths = secondNum || firstNum;
-  } else if (ageLower.includes('ans') || ageLower.includes('an')) {
-    if (ageLower.includes('-') && secondNum) {
-      ageMinMonths = firstNum * 12;
-      ageMaxMonths = secondNum * 12;
-    } else if (ageLower.includes('+')) {
-      ageMinMonths = firstNum * 12;
-      ageMaxMonths = null;
-    } else {
-      ageMinMonths = firstNum * 12;
-      ageMaxMonths = firstNum * 12;
-    }
-  } else if (ageLower.includes('+')) {
-    ageMinMonths = firstNum * 12;
-    ageMaxMonths = null;
+const parseAgeBounds = (label: string) => {
+  const lower = label.toLowerCase();
+  const numbers = lower.match(/\d+/g);
+  if (!numbers || numbers.length === 0) {
+    return { min: null, max: null };
   }
+  const first = parseInt(numbers[0], 10);
+  const second = numbers[1] ? parseInt(numbers[1], 10) : null;
+  const toMonthsIfYears = (val: number) => (lower.includes('mois') ? val : toMonths(val));
 
-  if (ageMinMonths === null) return null;
-
-  const sortedRanges = [...ageRanges].sort((a, b) => (b.ageMax || 999) - (a.ageMax || 999));
-  for (const ageRange of sortedRanges) {
-    const rangeMin = ageRange.ageMin;
-    const rangeMax = ageRange.ageMax || 999;
-
-    if (ageMaxMonths !== null) {
-      if (ageMinMonths <= rangeMax && ageMaxMonths >= rangeMin) {
-        return ageRange;
-      }
-    } else {
-      if (ageMinMonths >= rangeMin) {
-        return ageRange;
-      }
-    }
+  if (lower.includes('mois')) {
+    const min = first;
+    const max = second ?? first;
+    return { min, max };
   }
+  if (lower.includes('+') && !lower.includes('-')) {
+    return { min: toMonthsIfYears(first), max: null };
+  }
+  if (second !== null) {
+    return { min: toMonthsIfYears(first), max: toMonthsIfYears(second) };
+  }
+  return { min: toMonthsIfYears(first), max: toMonthsIfYears(first) };
+};
 
-  return null;
-}
+const getToyAgeBounds = (toy: ToyWithAge) => {
+  if (typeof toy.ageMin === "number") {
+    return {
+      min: toy.ageMin,
+      max: typeof toy.ageMax === "number" ? toy.ageMax : toy.ageMin,
+    };
+  }
+  return parseAgeBounds(toy.age || "");
+};
 
-async function getAgeRanges(): Promise<AgeRange[]> {
+const getRangeBoundsInMonths = (range: AgeRange) => {
+  const min = typeof range.ageMin === 'number' ? range.ageMin : 0;
+  const max = typeof range.ageMax === 'number' ? range.ageMax : Infinity;
+  return { min, max };
+};
+
+const buildFallbackAgeRanges = (toys: ToyWithAge[]): AgeRange[] => {
+  const ranges = new Map<string, AgeRange>();
+  toys.forEach((toy) => {
+    const bounds = getToyAgeBounds(toy);
+    if (bounds.min === null) return;
+
+    const label = toy.age && toy.age.trim().length > 0 ? toy.age : formatAgeLabelFromBounds(bounds.min, bounds.max);
+    const slug = normalizeToSlug(label);
+    if (!slug || ranges.has(slug)) return;
+
+    ranges.set(slug, {
+      id: slug,
+      label,
+      slug,
+      iconType: 'emoji',
+      icon: '🎯',
+      iconUrl: undefined,
+      ageMin: bounds.min,
+      ageMax: bounds.max,
+      displayOrder: ranges.size,
+      isActive: true,
+    });
+  });
+  return Array.from(ranges.values());
+};
+
+async function fetchAgeRanges(): Promise<AgeRange[]> {
   try {
     const response = await fetch(`${API_BASE_URL}/age-ranges`, {
-      next: { revalidate: 60 },
+      cache: "no-store",
     });
     if (response.ok) {
       const result = await response.json();
-      if (result.success && result.data) {
-        return result.data.filter((ar: AgeRange) => ar.isActive);
+      if (result.success && Array.isArray(result.data)) {
+        return result.data.filter((range: AgeRange) => range.isActive);
       }
     }
-  } catch (e) {}
+  } catch (error) {
+    console.warn("Impossible de charger les tranches d'âge:", error);
+  }
   return [];
 }
 
-interface Params { params: { age: string } }
+const mapToyToAgeRange = (toy: ToyWithAge, ageRanges: AgeRange[]): AgeRange | null => {
+  if (!ageRanges.length) return null;
+  const bounds = getToyAgeBounds(toy);
+  if (bounds.min === null) return null;
 
-export default async function AgeDetailPage({ params }: Params) {
+  if (toy.age) {
+    const direct = ageRanges.find((range) => normalizeToSlug(range.slug || range.label) === normalizeToSlug(toy.age || ""));
+    if (direct) return direct;
+  }
+
+  return (
+    ageRanges.find((range) => {
+      const { min, max } = getRangeBoundsInMonths(range);
+      const toyMax = bounds.max ?? bounds.min;
+      return bounds.min >= min && toyMax <= max && toyMax >= min;
+    }) || null
+  );
+};
+
+export async function generateStaticParams() {
+  const [toys, remoteRanges] = await Promise.all([getAllToys({ noCache: true }), fetchAgeRanges()]);
+  const ranges = remoteRanges.length ? remoteRanges : buildFallbackAgeRanges(toys);
+  return ranges.map((range) => ({ age: range.slug || normalizeToSlug(range.label) }));
+}
+
+export async function generateMetadata({ params }: { params: { age: string } }) {
+  const [toys, remoteRanges] = await Promise.all([getAllToys({ noCache: true }), fetchAgeRanges()]);
+  const ranges = remoteRanges.length ? remoteRanges : buildFallbackAgeRanges(toys);
+  const current =
+    ranges.find((range) => range.slug === params.age) ||
+    ranges.find((range) => normalizeToSlug(range.label) === params.age);
+  const ageLabel = current?.label ?? params.age.replace(/-/g, " ");
+  return {
+    title: `${ageLabel} - LOUAAB`,
+    description: `Découvrez nos jouets adaptés pour la tranche d'âge ${ageLabel}.`,
+  };
+}
+
+export default async function AgeDetailPage({ params }: { params: { age: string } }) {
   const slug = params.age;
-  const [toys, ageRanges] = await Promise.all([getAllToys(), getAgeRanges()]);
-  const currentAge = ageRanges.find(a => a.slug === slug) || null;
+  const [toys, remoteRanges] = await Promise.all([getAllToys({ noCache: true }), fetchAgeRanges()]);
+  const ageRanges = remoteRanges.length ? remoteRanges : buildFallbackAgeRanges(toys);
+  const currentAge =
+    ageRanges.find((range) => range.slug === slug) ||
+    ageRanges.find((range) => normalizeToSlug(range.label) === slug) ||
+    null;
 
   const toysForAge = currentAge
-    ? toys.filter(toy => {
-        const mapped = mapAgeToAgeRange(toy.age, ageRanges);
-        return mapped && mapped.id === currentAge.id;
-      })
-    : [];
+    ? toys.filter((toy) => mapToyToAgeRange(toy as ToyWithAge, ageRanges)?.id === currentAge.id)
+    : toys.filter((toy) => normalizeToSlug(toy.age || "") === slug);
 
   return (
     <PageShell>
       <section className="border-b border-mist/60 bg-gradient-to-br from-purple-50 to-pink-50 py-12">
         <div className="mx-auto w-full max-w-6xl px-4">
           <nav className="flex items-center gap-2 text-sm text-slate mb-4">
-            <Link href="/" className="hover:text-mint">Accueil</Link>
+            <Link href="/" className="hover:text-mint">
+              Accueil
+            </Link>
             <span>/</span>
-            <Link href="/ages" className="hover:text-mint">Âges</Link>
+            <Link href="/ages" className="hover:text-mint">
+              Âges
+            </Link>
             <span>/</span>
-            <span className="text-charcoal">{currentAge?.label || 'Âge'}</span>
+            <span className="text-charcoal">{currentAge?.label || slug.replace(/-/g, " ")}</span>
           </nav>
-          <h1 className="text-3xl font-bold text-charcoal">
-            {currentAge?.label || 'Âge'}
-          </h1>
+          <h1 className="text-3xl font-bold text-charcoal">{currentAge?.label || slug.replace(/-/g, " ")}</h1>
           {currentAge && (
             <div className="mt-2 text-5xl">
-              {currentAge.iconType === 'emoji' ? (
+              {currentAge.iconType === "emoji" ? (
                 currentAge.icon
-              ) : currentAge.iconType === 'upload' && currentAge.iconUrl ? (
+              ) : currentAge.iconType === "upload" && currentAge.iconUrl ? (
                 <Image src={currentAge.iconUrl} alt={currentAge.label} width={64} height={64} />
               ) : (
-                <span>{currentAge.icon}</span>
+                <span>{currentAge.icon || "🎯"}</span>
               )}
             </div>
           )}
@@ -136,22 +210,20 @@ export default async function AgeDetailPage({ params }: Params) {
         {toysForAge.length === 0 ? (
           <div className="text-center text-slate">Aucun jouet pour cette tranche d'âge.</div>
         ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {toysForAge.map(toy => (
-              <Link key={toy.id} href={`/jouets/${toy.slug}`} className="rounded-xl border p-4 bg-white hover:shadow">
-                <div className="aspect-square w-full rounded-lg bg-gray-100 overflow-hidden mb-3">
-                  {/* image simple via img pour limiter la dépendance */}
-                  <img src={toy.thumbnail || toy.image} alt={toy.name} className="w-full h-full object-cover" />
-                </div>
-                <div className="font-semibold text-charcoal">{toy.name}</div>
-                <div className="text-sm text-slate">{toy.category}</div>
-                <div className="text-mint font-bold mt-1">{toy.price}</div>
-              </Link>
-            ))}
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-charcoal">Jouets disponibles</h2>
+              <span className="text-sm text-slate">{toysForAge.length} jouet{toysForAge.length > 1 ? "s" : ""}</span>
+            </div>
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {toysForAge.map((toy, index) => (
+                <ToyCardWithReservation key={`${toy.backendId || toy.id}-${index}`} toy={toy} priority={index < 4} />
+              ))}
+            </div>
           </div>
         )}
       </section>
     </PageShell>
   );
 }
-
+export const dynamic = "force-dynamic";

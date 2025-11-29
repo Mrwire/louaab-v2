@@ -102,8 +102,10 @@ export function SiteHeader() {
             </nav>
           )}
           {isDesktop && searchActive && (
-            <div ref={searchWrapRef} className="flex-1 px-4 transition-all duration-200">
-              <HeaderSearch />
+            <div ref={searchWrapRef} className="flex-1 px-4">
+              <div className="mx-auto w-full max-w-xl transition-all duration-200 ease-out">
+                <HeaderSearch />
+              </div>
             </div>
           )}
 
@@ -114,10 +116,11 @@ export function SiteHeader() {
             <button
               type="button"
               onClick={() => setSearchActive((s) => !s)}
-              className={`flex h-10 w-10 items-center justify-center rounded-xl border text-charcoal transition-all duration-200 ${searchActive ? 'border-mint bg-mint/10' : 'border-mist hover:border-mint hover:bg-mint/10'}`}
+              className={`flex h-10 w-10 items-center justify-center rounded-xl border text-charcoal transition-all duration-200 ${searchActive ? 'border-mint bg-mint/15 shadow-sm' : 'border-mist hover:border-mint hover:bg-mint/10'}`}
               aria-label="Rechercher"
+              aria-expanded={searchActive}
             >
-              <Search size={18} />
+              {searchActive ? <X size={18} /> : <Search size={18} />}
             </button>
 
             {/* Favoris */}

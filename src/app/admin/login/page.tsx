@@ -20,7 +20,7 @@ export default function AdminLogin() {
     
     // Vérifier si déjà connecté
     if (AuthManager.isAuthenticated()) {
-      router.push('/admin');
+      router.push('/admin/dashboard');
     }
   }, [router]);
 
@@ -33,11 +33,12 @@ export default function AdminLogin() {
       
       if (isValid) {
         showSuccess("Succès", "Connexion réussie !");
-        router.push('/admin');
+        router.push('/admin/dashboard');
       } else {
         showError("Erreur", "Nom d'utilisateur ou mot de passe incorrect");
       }
     } catch (error) {
+      console.error('Erreur de connexion administrateur:', error);
       showError("Erreur", "Erreur lors de la connexion");
     } finally {
       setIsLoading(false);

@@ -6,7 +6,8 @@ import Image from "next/image";
 import { Heart, ShoppingCart, X } from "lucide-react";
 import { useFavorites } from "@/contexts/favorites-context";
 import { useCart } from "@/contexts/cart-context";
-import { loadToysData, ToyData } from "@/lib/toys-data";
+import { getAllToys, ToyData } from "@/lib/toys-data";
+import { formatDateInput } from "@/lib/date";
 
 export default function FavoritesDropdown() {
   const [isOpen, setIsOpen] = useState(false);
@@ -18,9 +19,11 @@ export default function FavoritesDropdown() {
   // Charger les données des jouets favoris
   useEffect(() => {
     const fetchFavorites = async () => {
-      const toysMapping = await loadToysData();
-      const allToys = Object.values(toysMapping.toys);
-      const filtered = allToys.filter(toy => favorites.includes(String(toy.id)));
+      const allToys = await getAllToys();
+      const filtered = allToys.filter((toy) => {
+        const toyKey = String(toy.backendId ?? toy.id);
+        return favorites.includes(toyKey);
+      });
       setFavoriteToys(filtered);
     };
     fetchFavorites();
@@ -45,12 +48,15 @@ export default function FavoritesDropdown() {
 
   // Vérifier si un jouet est dans le panier (peu importe la durée)
   const isInCart = (toyId: string): boolean => {
-    return items.some(item => item.toy.id === parseInt(toyId));
+    return items.some(item => {
+      const itemKey = String(item.toy.backendId ?? item.toy.id);
+      return itemKey === toyId;
+    });
   };
 
   const handleAddToCart = (toy: ToyData) => {
-    const defaultDuration = "weekly"; // Durée par défaut
-    const defaultDate = new Date().toISOString().split('T')[0];
+    const defaultDuration = "weekly"; // Duree par defaut
+    const defaultDate = formatDateInput();
     addToCart(toy, defaultDuration, defaultDate);
     
     // Effet confetti
@@ -91,9 +97,9 @@ export default function FavoritesDropdown() {
         className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-mist text-charcoal transition hover:border-mint hover:bg-mint/10"
         aria-label="Favoris"
       >
-        <Heart size={18} className={favorites.length > 0 ? 'fill-coral text-coral' : ''} />
+        <Heart size={18} className={favorites.length > 0 ? 'fill-red-500 text-red-500' : ''} />
         {favorites.length > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-coral text-[10px] font-bold text-white">
+          <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
             {favorites.length}
           </span>
         )}
@@ -107,7 +113,7 @@ export default function FavoritesDropdown() {
           {/* Header */}
           <div className="border-b border-mist px-4 py-3">
             <h3 className="text-lg font-semibold text-charcoal flex items-center gap-2">
-              <Heart size={18} className="text-coral fill-coral" />
+              <Heart size={18} className="text-red-500 fill-red-500" />
               Mes favoris
               <span className="ml-auto text-sm font-normal text-slate">
                 {favorites.length} {favorites.length > 1 ? 'jouets' : 'jouet'}
@@ -129,9 +135,11 @@ export default function FavoritesDropdown() {
               </div>
             ) : (
               <div className="divide-y divide-mist">
-                {favoriteToys.map((toy) => (
-                  <div key={toy.id} className="px-4 py-3 hover:bg-mint/5 transition group">
-                    <div className="flex gap-3">
+                {favoriteToys.map((toy) => {
+                  const toyKey = String(toy.backendId ?? toy.id);
+                  return (
+                    <div key={toyKey} className="px-4 py-3 hover:bg-mint/5 transition group">
+                      <div className="flex gap-3">
                       {/* Image */}
                       <Link href={`/jouets/${toy.slug}`} className="relative h-16 w-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
                         <Image
@@ -166,16 +174,16 @@ export default function FavoritesDropdown() {
                             background: 'linear-gradient(to right, #1897aa, #0d74b1)',
                             color: '#ffffff'
                           }}
-                          title={isInCart(String(toy.id)) ? "Dans le panier" : "Ajouter au panier"}
+                          title={isInCart(toyKey) ? "Dans le panier" : "Ajouter au panier"}
                         >
-                          {isInCart(String(toy.id)) ? (
+                          {isInCart(toyKey) ? (
                             <span className="text-sm" style={{ color: '#ffffff' }}>✅</span>
                           ) : (
                             <ShoppingCart size={14} style={{ color: '#ffffff' }} />
                           )}
                         </button>
                         <button
-                          onClick={() => removeFromFavorites(String(toy.id))}
+                          onClick={() => removeFromFavorites(toyKey)}
                           className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition"
                           title="Retirer des favoris"
                         >
@@ -184,7 +192,8 @@ export default function FavoritesDropdown() {
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

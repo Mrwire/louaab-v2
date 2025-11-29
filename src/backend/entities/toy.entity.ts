@@ -33,6 +33,9 @@ export class Toy {
   @Column({ unique: true, nullable: true })
   sku!: string;
 
+  @Column({ unique: true, nullable: true })
+  slug!: string;
+
   @Column()
   name!: string;
 

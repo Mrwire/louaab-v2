@@ -56,7 +56,7 @@ export default function FeaturedToysSection({ toys }: FeaturedToysSectionProps) 
           viewport={{ once: true, margin: "-100px" }}
         >
           {toys.map((toy) => (
-            <motion.div key={toy.id} variants={item}>
+            <motion.div key={toy.backendId ?? toy.id} variants={item}>
               <ToyCard toy={toy} priority />
             </motion.div>
           ))}

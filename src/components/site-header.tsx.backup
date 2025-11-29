@@ -15,10 +15,10 @@ import MobileSearchModal from "./mobile-search-modal";
 
 const NAV_LINKS = [
   { href: "/jouets", label: "Jouets" },
-  { href: "/ages", label: "Ã‚ges" },
-  { href: "/categories", label: "CatÃ©gories" },
+  { href: "/ages", label: "Âges" },
+  { href: "/categories", label: "Catégories" },
   { href: "/nos-packs", label: "Nos packs" },
-  { href: "/comment-ca-marche", label: "Comment Ã§a marche" },
+  { href: "/comment-ca-marche", label: "Comment ça marche" },
   { href: "/faq", label: "FAQ" },
   { href: "/contact", label: "Contact" },
 ];

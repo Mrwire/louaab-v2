@@ -16,9 +16,13 @@
 # next.js
 /.next/
 /out/
+/dist
 
 # production
 /build
+
+# large assets (import)
+/public/toys/import/
 
 # misc
 .DS_Store

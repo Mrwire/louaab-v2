@@ -1,17 +1,17 @@
-import Link from 'next/link';
 import Image from 'next/image';
+import Link from 'next/link';
+
 import { PageShell } from '@/components/page-shell';
+import { API_BASE_URL } from '@/lib/api/config';
 import { getAllToys } from '@/lib/toys-data';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
-  title: 'Jouets par âge - LOUAAB',
-  description: 'Trouvez des jouets adaptés à l\'âge de votre enfant',
+  title: 'Jouets par age - LOUAAB',
+  description: "Trouvez des jouets adaptes a l'age de votre enfant",
 };
 
-// URL du backend API - utiliser une URL relative pour éviter Mixed Content
-const API_BASE_URL = typeof window !== 'undefined' 
-  ? (process.env.NEXT_PUBLIC_API_URL || '/api')
-  : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api');
 
 interface AgeRange {
   id: string;
@@ -26,83 +26,101 @@ interface AgeRange {
   isActive: boolean;
 }
 
-/**
- * Fonction pour mapper un âge de la base de données vers une tranche d'âge
- */
-function mapAgeToAgeRange(age: string, ageRanges: AgeRange[]): AgeRange | null {
-  if (!age) return null;
-  
+type ToyWithAge = {
+  age?: string;
+  ageMin?: number | null;
+  ageMax?: number | null;
+};
+
+const toMonths = (value: number) => value * 12;
+
+const formatAgeLabelFromMonths = (minMonths: number, maxMonths: number | null) => {
+  const fmt = (m: number) => {
+    if (m < 12) return `${m} mois`;
+    const years = m / 12;
+    return Number.isInteger(years) ? `${years} ans` : `${years.toFixed(1)} ans`;
+  };
+  if (maxMonths === null) return `${fmt(minMonths)} +`;
+  if (maxMonths === minMonths) return fmt(minMonths);
+  return `${fmt(minMonths)} - ${fmt(maxMonths)}`;
+};
+
+const parseAgeStringToBounds = (age: string): { min: number | null; max: number | null } => {
   const ageLower = age.toLowerCase().trim().replace(/\s+/g, ' ');
-  
-  // Extraire les nombres de l'âge
   const numbers = ageLower.match(/\d+/g);
-  if (!numbers || numbers.length === 0) return null;
-  
-  const firstNum = parseInt(numbers[0]);
-  const secondNum = numbers.length > 1 ? parseInt(numbers[1]) : null;
-  
-  // Convertir en mois pour la comparaison
-  let ageMinMonths: number | null = null;
-  let ageMaxMonths: number | null = null;
-  
+  if (!numbers || numbers.length === 0) return { min: null, max: null };
+
+  const firstNum = parseInt(numbers[0], 10);
+  const secondNum = numbers.length > 1 ? parseInt(numbers[1], 10) : null;
+  const toMonthsIfYears = (val: number) => (ageLower.includes('mois') ? val : toMonths(val));
+
   if (ageLower.includes('mois')) {
-    ageMinMonths = firstNum;
-    ageMaxMonths = secondNum || firstNum;
-  } else if (ageLower.includes('ans') || ageLower.includes('an')) {
-    if (ageLower.includes('-') && secondNum) {
-      // Plage comme "2-3 ans"
-      ageMinMonths = firstNum * 12;
-      ageMaxMonths = secondNum * 12;
-    } else if (ageLower.includes('+')) {
-      // Comme "3+ ans"
-      ageMinMonths = firstNum * 12;
-      ageMaxMonths = null; // Pas de limite supérieure
-    } else {
-      // Âge unique comme "3 ans"
-      ageMinMonths = firstNum * 12;
-      ageMaxMonths = firstNum * 12;
-    }
-  } else if (ageLower.includes('+')) {
-    // Comme "3+"
-    ageMinMonths = firstNum * 12;
-    ageMaxMonths = null;
+    const min = firstNum;
+    const max = secondNum ?? firstNum;
+    return { min, max };
   }
-  
-  if (ageMinMonths === null) return null;
-  
-  // Trier les tranches d'âges par ordre décroissant pour trouver la meilleure correspondance
-  const sortedRanges = [...ageRanges].sort((a, b) => (b.ageMax || 999) - (a.ageMax || 999));
-  
-  // Trouver la tranche d'âge correspondante
-  for (const ageRange of sortedRanges) {
-    // Vérifier si l'âge du jouet chevauche avec cette tranche
-    const rangeMin = ageRange.ageMin;
-    const rangeMax = ageRange.ageMax || 999;
-    
-    // Si le jouet a une plage d'âge
-    if (ageMaxMonths !== null) {
-      // Vérifier si les plages se chevauchent
-      if (ageMinMonths <= rangeMax && ageMaxMonths >= rangeMin) {
-        return ageRange;
-      }
-    } else {
-      // Si le jouet n'a pas de limite supérieure (X+)
-      if (ageMinMonths >= rangeMin) {
-        return ageRange;
-      }
+
+  if (ageLower.includes('ans') || ageLower.includes('an') || ageLower.includes('+') || ageLower.includes('-')) {
+    if (ageLower.includes('-') && secondNum !== null) {
+      return { min: toMonthsIfYears(firstNum), max: toMonthsIfYears(secondNum) };
     }
+    if (ageLower.includes('+')) {
+      return { min: toMonthsIfYears(firstNum), max: null };
+    }
+    return { min: toMonthsIfYears(firstNum), max: toMonthsIfYears(secondNum ?? firstNum) };
   }
-  
-  return null;
+
+  if (ageLower.includes('+')) {
+    return { min: toMonthsIfYears(firstNum), max: null };
+  }
+
+  return { min: null, max: null };
+};
+
+const getToyAgeBounds = (toy: ToyWithAge) => {
+  if (typeof toy.ageMin === 'number') {
+    return {
+      min: toy.ageMin,
+      max: typeof toy.ageMax === 'number' ? toy.ageMax : toy.ageMin,
+    };
+  }
+  return parseAgeStringToBounds(toy.age || '');
+};
+
+const getRangeBoundsInMonths = (range: AgeRange) => {
+  const min = typeof range.ageMin === 'number' ? range.ageMin : 0;
+  const max = typeof range.ageMax === 'number' ? range.ageMax : Infinity;
+  return { min, max };
+};
+
+// Mapper un jouet vers une tranche d'?ge
+function mapToyToAgeRange(toy: ToyWithAge, ageRanges: AgeRange[]): AgeRange | null {
+  if (!ageRanges.length) return null;
+  const bounds = getToyAgeBounds(toy);
+  if (bounds.min === null) return null;
+
+  const sortedRanges = [...ageRanges].sort((a, b) => {
+    const { max: maxA } = getRangeBoundsInMonths(a);
+    const { max: maxB } = getRangeBoundsInMonths(b);
+    return maxB - maxA;
+  });
+
+  return (
+    sortedRanges.find((ageRange) => {
+      const { min, max } = getRangeBoundsInMonths(ageRange);
+      const toyMax = bounds.max ?? bounds.min;
+      return bounds.min >= min && toyMax <= max && toyMax >= min;
+    }) || null
+  );
 }
 
-// Fonction pour charger les tranches d'âges depuis le backend
+// Fonction pour charger les tranches d'ages depuis le backend
 async function getAgeRanges(): Promise<AgeRange[]> {
   try {
     const response = await fetch(`${API_BASE_URL}/age-ranges`, {
-      next: { revalidate: 60 }, // Cache pendant 60 secondes
+      cache: "no-store",
     });
-    
+
     if (response.ok) {
       const result = await response.json();
       if (result.success && result.data) {
@@ -110,10 +128,10 @@ async function getAgeRanges(): Promise<AgeRange[]> {
       }
     }
   } catch (error) {
-    console.error('Erreur lors du chargement des tranches d\'âges:', error);
+    console.error("Erreur lors du chargement des tranches d'ages:", error);
   }
-  
-  // Fallback: données par défaut
+
+  // Fallback: donnees par defaut
   return [
     { id: '1', label: '0-12 mois', slug: '0-12-mois', iconType: 'emoji' as const, icon: '👶', ageMin: 0, ageMax: 12, displayOrder: 0, isActive: true },
     { id: '2', label: '12-24 mois', slug: '12-24-mois', iconType: 'emoji' as const, icon: '🍼', ageMin: 12, ageMax: 24, displayOrder: 1, isActive: true },
@@ -125,21 +143,20 @@ async function getAgeRanges(): Promise<AgeRange[]> {
 }
 
 export default async function AgesPage() {
-  const toys = await getAllToys();
+  const toys = await getAllToys({ noCache: true });
   const ageRanges = await getAgeRanges();
 
-  // Grouper les jouets par tranche d'âge
-  const agesWithCount = ageRanges.map(ageRange => {
-    const count = toys.filter(toy => {
-      const mappedRange = mapAgeToAgeRange(toy.age, ageRanges);
-      return mappedRange && mappedRange.id === ageRange.id;
-    }).length;
-    
-    return {
-      ...ageRange,
-      count,
-    };
-  }).filter(age => age.count > 0 || age.isActive); // Garder toutes les tranches actives, même avec 0 jouet
+  // Grouper les jouets par tranche d'age
+  const agesWithCount = ageRanges
+    .map((ageRange) => {
+      const count = toys.filter((toy) => mapToyToAgeRange(toy, ageRanges)?.id === ageRange.id).length;
+
+      return {
+        ...ageRange,
+        count,
+      };
+    })
+    .filter((age) => age.count > 0 || age.isActive); // Garder toutes les tranches actives, meme avec 0 jouet
 
   return (
     <PageShell>
@@ -151,14 +168,14 @@ export default async function AgesPage() {
             <span>/</span>
             <Link href="/jouets" className="hover:text-mint">Jouets</Link>
             <span>/</span>
-            <span className="text-charcoal">Âges</span>
+            <span className="text-charcoal">Ages</span>
           </nav>
 
           <h1 className="text-4xl font-bold uppercase tracking-[0.1em] text-charcoal">
-            Jouets par âge
+            Jouets par age
           </h1>
           <p className="mt-3 text-base text-slate">
-            Trouvez le jouet parfait adapté à l&apos;âge de votre enfant
+            Trouvez le jouet parfait adapte a l'age de votre enfant
           </p>
         </div>
       </section>
@@ -172,7 +189,7 @@ export default async function AgesPage() {
               href={`/ages/${age.slug}`}
               className="group flex flex-col items-center justify-center rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-gray-100 transition hover:shadow-lg hover:ring-purple-500"
             >
-              {/* Icône */}
+              {/* Icone */}
               <div className="text-5xl mb-4">
                 {age.iconType === 'emoji' ? (
                   age.icon
@@ -185,10 +202,10 @@ export default async function AgesPage() {
                     className="mx-auto rounded-lg object-cover"
                   />
                 ) : (
-                  <span>{age.icon || '🎯'}</span>
+                  <span>{age.icon || 'ð¯'}</span>
                 )}
               </div>
-              
+
               <h3 className="font-bold text-charcoal group-hover:text-purple-600 text-lg">
                 {age.label}
               </h3>
@@ -202,4 +219,3 @@ export default async function AgesPage() {
     </PageShell>
   );
 }
-

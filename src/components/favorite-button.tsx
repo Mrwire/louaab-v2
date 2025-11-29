@@ -13,36 +13,35 @@ interface FavoriteButtonProps {
 export default function FavoriteButton({ toy, className = "" }: FavoriteButtonProps) {
   const { toggleFavorite, isFavorite } = useFavorites();
   const [isAnimating, setIsAnimating] = useState(false);
+  const toyKey = String(toy.backendId ?? toy.id);
 
   const handleToggleFavorite = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     
     setIsAnimating(true);
-    toggleFavorite(String(toy.id));
+    toggleFavorite(toyKey);
     
     // Animation feedback
     setTimeout(() => setIsAnimating(false), 300);
   };
 
-  const isFav = isFavorite(String(toy.id));
+  const isFav = isFavorite(toyKey);
 
   return (
     <button
       onClick={handleToggleFavorite}
-      className={`flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-all duration-300 ${
-        isFav 
-          ? 'bg-red-500 text-white scale-110' 
-          : 'bg-white text-charcoal hover:bg-red-500 hover:text-white'
-      } ${className} ${
-        isAnimating ? 'animate-pulse' : ''
-      }`}
+      className={`flex h-11 w-11 items-center justify-center rounded-full border shadow-lg transition-all duration-300 ${
+        isFav
+          ? 'border-red-500 bg-white text-red-500 scale-110'
+          : 'border-mist bg-white text-charcoal hover:border-red-300 hover:text-red-500'
+      } ${className} ${isAnimating ? 'animate-pulse' : ''}`}
       title={isFav ? "Retirer des favoris" : "Ajouter aux favoris"}
     >
-      <Heart 
+      <Heart
         className={`h-4 w-4 transition-all duration-300 ${
-          isFav ? 'fill-white' : ''
-        }`} 
+          isFav ? 'fill-red-500 text-red-500' : ''
+        }`}
       />
     </button>
   );

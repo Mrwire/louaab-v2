@@ -1,18 +1,25 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { OrderManager, Order } from "@/lib/orders";
-import { PackManager } from "@/lib/packs";
+import type { Order } from "@/lib/orders";
+import { OrderManager } from "@/lib/orders";
+import { PackManager, type Pack } from "@/lib/packs";
 import { DashboardMetricsCalculator, type DashboardMetrics } from "@/lib/dashboard-metrics";
 import { useNotifications } from "@/components/notification-toast";
-import { 
-  ShoppingCart, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
-  Eye, 
-  Phone, 
+import {
+  fetchAdminOrders,
+  fetchAdminOrderStats,
+  updateAdminOrderStatus,
+  type AdminOrderStats,
+} from "@/lib/api/admin-orders";
+import {
+  ShoppingCart,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Eye,
+  Phone,
   User,
   Package,
   DollarSign,
@@ -21,10 +28,119 @@ import {
   Star,
   Timer,
   RefreshCw,
-  Truck
+  Truck,
+  TrendingUp,
+  Mail,
 } from "lucide-react";
 
 type DashboardAlert = ReturnType<typeof DashboardMetricsCalculator.getImportantAlerts>[number];
+type ContactMessage = {
+  id: string;
+  name: string;
+  email: string;
+  message: string;
+  status: string;
+  createdAt: string;
+};
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || 'https://louaab.ma/api';
+
+const safeString = (value: unknown, fallback = ""): string =>
+  typeof value === "string" && value.trim().length > 0 ? value : fallback;
+
+const safeNumber = (value: unknown, fallback = 0): number => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+};
+
+const generatePackId = () => `pack-${Math.random().toString(36).slice(2)}`;
+
+const withTimeout = async <T>(promise: Promise<T>, ms = 7000, label = 'request'): Promise<T> => {
+  let timeoutId: NodeJS.Timeout;
+  return new Promise<T>((resolve, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`Timeout ${label}`)), ms);
+    promise
+      .then((value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+};
+
+const mapPackFromApi = (raw: Record<string, unknown>): Pack => {
+  const badgeValue = safeString(raw?.badge);
+
+  return {
+    id: safeString(raw?.id, generatePackId()),
+    name: safeString(raw?.name),
+    slug: safeString(raw?.slug),
+    description: safeString(raw?.description),
+    priceMonthly: safeNumber(raw?.price),
+    toyCount: safeNumber(raw?.toyCount),
+    durationMonths: Math.max(1, Math.round(safeNumber(raw?.durationDays, 30) / 30)),
+    depositAmount: safeNumber(raw?.depositAmount),
+    swapIncluded: true,
+    swapFrequencyDays: 30,
+    citiesAvailable: [],
+    isActive: Boolean(raw?.isActive ?? true),
+    displayOrder: safeNumber(raw?.displayOrder),
+    badge: badgeValue || undefined,
+    color: safeString(raw?.color, "mint"),
+    icon: safeString(raw?.icon, "🎁"),
+    ageRange: "",
+    features: (() => {
+      const value = raw?.features;
+      try {
+        if (!value) return [];
+        if (Array.isArray(value)) return value as string[];
+        if (typeof value === "string") return JSON.parse(value);
+        return [];
+      } catch {
+        return [];
+      }
+    })(),
+  };
+};
+
+const fetchPacksSnapshot = async (): Promise<Pack[]> => {
+  const response = await fetch(`${API_BASE_URL}/packs`);
+  const body = await response.json().catch(() => ({}));
+
+  if (!response.ok || !body?.data || !Array.isArray(body.data)) {
+    throw new Error(body?.message || 'Impossible de charger les packs');
+  }
+
+  return body.data.map(mapPackFromApi);
+};
+
+const STAT_RANGE_OPTIONS = [30, 60, 90, 180];
+
+const mapContactFromApi = (raw: Record<string, any>): ContactMessage => ({
+  id: raw?.id ?? `contact-${Math.random().toString(36).slice(2)}`,
+  name: raw?.name || "Visiteur",
+  email: raw?.email || "N/A",
+  message: raw?.message || "",
+  status: raw?.status || "new",
+  createdAt: raw?.createdAt || new Date().toISOString(),
+});
+
+const fetchRecentContacts = async (): Promise<ContactMessage[]> => {
+  const response = await fetch(`${API_BASE_URL}/contact`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || !Array.isArray(body?.data)) {
+    throw new Error(body?.message || "Impossible de charger les messages de contact");
+  }
+  return body.data.slice(0, 5).map(mapContactFromApi);
+};
 
 export default function AdminDashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -33,42 +149,162 @@ export default function AdminDashboard() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [alerts, setAlerts] = useState<DashboardAlert[]>([]);
+  const [packsSnapshot, setPacksSnapshot] = useState<Pack[]>([]);
+  const [orderStats, setOrderStats] = useState<AdminOrderStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
+  const [contactError, setContactError] = useState<string | null>(null);
+  const [statsRange, setStatsRange] = useState(90);
+  const [hasWelcomed, setHasWelcomed] = useState(false);
   const { showSuccess, showWarning, showInfo } = useNotifications();
 
-  useEffect(() => {
-    // Initialiser les données d'exemple si nécessaire
-    OrderManager.initializeSampleData();
-    
-    // Charger les commandes depuis le stockage
-    const loadedOrders = OrderManager.getAllOrders();
-    setOrders(loadedOrders);
-    
-  // Charger les packs
-  const loadedPacks = PackManager.getAllPacks();
-    
-    // Calculer les métriques réelles
-    const calculatedMetrics = DashboardMetricsCalculator.calculateMetrics(loadedOrders, loadedPacks);
+  const recomputeDashboard = (nextOrders: Order[], packData: Pack[]) => {
+    const calculatedMetrics = DashboardMetricsCalculator.calculateMetrics(nextOrders, packData);
     setMetrics(calculatedMetrics);
-    
-    // Obtenir les commandes récentes
-    const recent = DashboardMetricsCalculator.getRecentOrders(loadedOrders);
-    setRecentOrders(recent);
-    
-    // Obtenir les alertes importantes
-    const importantAlerts = DashboardMetricsCalculator.getImportantAlerts(loadedOrders, calculatedMetrics);
-    setAlerts(importantAlerts);
-    
-    // Afficher une notification de bienvenue
-    showInfo(
-      "Dashboard Admin", 
-      `Bienvenue ! ${loadedOrders.length} commandes chargées.`,
-      3000
-    );
-  }, [showInfo]);
+    setRecentOrders(DashboardMetricsCalculator.getRecentOrders(nextOrders));
+    setAlerts(DashboardMetricsCalculator.getImportantAlerts(nextOrders, calculatedMetrics));
+  };
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadDashboard = async () => {
+      if (mounted) {
+        setIsLoading(true);
+      }
+
+      let contactLoadError: string | null = null;
+
+      try {
+        const [ordersData, packsData, statsData, contactData] = await Promise.all([
+          withTimeout(fetchAdminOrders(), 7000, 'orders'),
+          withTimeout(fetchPacksSnapshot(), 7000, 'packs'),
+          withTimeout(fetchAdminOrderStats({ rangeDays: statsRange }), 7000, 'stats'),
+          withTimeout(fetchRecentContacts(), 5000, 'contacts').catch((error) => {
+            contactLoadError =
+              error instanceof Error
+                ? error.message
+                : "Impossible de charger les messages de contact";
+            return [];
+          }),
+        ]);
+
+        if (!mounted) return;
+
+        setOrders(ordersData);
+        setPacksSnapshot(packsData);
+        setOrderStats(statsData);
+        setContactMessages(contactData);
+        setContactError(contactLoadError);
+        recomputeDashboard(ordersData, packsData);
+
+        if (!hasWelcomed) {
+          showInfo(
+            "Dashboard Admin",
+            `Bienvenue ! ${ordersData.length} commandes chargées.`,
+            3000,
+          );
+          setHasWelcomed(true);
+        }
+      } catch (err) {
+        console.error("Erreur Dashboard:", err);
+        if (!mounted) return;
+      const localOrders = OrderManager.getAllOrders();
+        const localPacks = PackManager.getAllPacks();
+
+        if (localOrders.length || localPacks.length) {
+          setOrders(localOrders);
+          setPacksSnapshot(localPacks);
+          setOrderStats(null);
+          setContactMessages([]);
+          setContactError(contactLoadError);
+          recomputeDashboard(localOrders, localPacks);
+          setError(
+            err instanceof Error
+              ? `API indisponible: ${err.message}`
+              : "API indisponible, affichage des données locales",
+          );
+        } else {
+          setOrders([]);
+          setPacksSnapshot([]);
+          setOrderStats(null);
+          setContactMessages([]);
+          setContactError(contactLoadError);
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Impossible de charger les données du dashboard",
+          );
+        }
+
+        showWarning(
+          "Dashboard",
+          "Impossible de charger les données en temps réel",
+          4000,
+        );
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadDashboard();
+
+    return () => {
+      mounted = false;
+    };
+  }, [showInfo, showWarning, statsRange, hasWelcomed]);
 
   const filteredOrders = orders.filter(order => 
     selectedStatus === "all" || order.status === selectedStatus
   );
+
+  const formatRangeDate = (value?: string) =>
+    value ? new Date(value).toLocaleDateString("fr-FR") : "";
+
+  const getContactStatusStyles = (status: string) => {
+    switch (status) {
+      case "new":
+        return "bg-mint/15 text-mint";
+      case "in_progress":
+        return "bg-yellow-50 text-yellow-700";
+      case "resolved":
+        return "bg-blue-50 text-blue-700";
+      case "closed":
+        return "bg-gray-100 text-gray-600";
+      default:
+        return "bg-gray-100 text-gray-600";
+    }
+  };
+
+  const getContactStatusLabel = (status: string) => {
+    switch (status) {
+      case "new":
+        return "Nouveau";
+      case "in_progress":
+        return "En cours";
+      case "resolved":
+        return "Résolu";
+      case "closed":
+        return "Fermé";
+      default:
+        return status;
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-mint border-t-transparent"></div>
+          <p className="mt-4 text-slate">Chargement du dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   const getStatusColor = (status: Order["status"]) => {
     switch (status) {
@@ -90,38 +326,61 @@ export default function AdminDashboard() {
     }
   };
 
-  const updateOrderStatus = (orderId: string, newStatus: Order["status"]) => {
-    const order = orders.find(o => o.id === orderId);
-    if (!order) return;
+  const updateOrderStatus = async (orderId: string, newStatus: Order["status"]) => {
+    const currentOrder = orders.find(o => o.id === orderId);
+    if (!currentOrder) return;
 
-    OrderManager.updateOrderStatus(orderId, newStatus);
-    setOrders(prev => prev.map(order => 
-      order.id === orderId ? { ...order, status: newStatus } : order
-    ));
+    setUpdatingId(orderId);
+    try {
+      await updateAdminOrderStatus(orderId, newStatus);
+      const nextOrders = orders.map(order =>
+        order.id === orderId ? { ...order, status: newStatus } : order
+      );
+      setOrders(nextOrders);
+      setSelectedOrder(prev =>
+        prev && prev.id === orderId ? { ...prev, status: newStatus } : prev
+      );
+      recomputeDashboard(nextOrders, packsSnapshot);
 
-    // Notifications selon le statut
-    switch (newStatus) {
-      case 'confirmed':
-        showSuccess(
-          "Commande confirmée",
-          `La commande ${orderId} de ${order.customerName} a été confirmée.`,
-          4000
-        );
-        break;
-      case 'completed':
-        showSuccess(
-          "Commande terminée",
-          `La commande ${orderId} de ${order.customerName} a été marquée comme terminée.`,
-          4000
-        );
-        break;
-      case 'cancelled':
-        showWarning(
-          "Commande annulée",
-          `La commande ${orderId} de ${order.customerName} a été annulée.`,
-          4000
-        );
-        break;
+      if (orderStats) {
+        const refreshedStats = await fetchAdminOrderStats({
+          rangeDays: orderStats.period.rangeDays,
+        });
+        setOrderStats(refreshedStats);
+      }
+
+      switch (newStatus) {
+        case 'confirmed':
+          showSuccess(
+            "Commande confirmée",
+            `La commande ${orderId} de ${currentOrder.customerName} a été confirmée.`,
+            4000
+          );
+          break;
+        case 'completed':
+          showSuccess(
+            "Commande terminée",
+            `La commande ${orderId} de ${currentOrder.customerName} a été marquée comme terminée.`,
+            4000
+          );
+          break;
+        case 'cancelled':
+          showWarning(
+            "Commande annulée",
+            `La commande ${orderId} de ${currentOrder.customerName} a été annulée.`,
+            4000
+          );
+          break;
+      }
+    } catch (error) {
+      console.error('Impossible de mettre à jour la commande:', error);
+      showWarning(
+        "Erreur",
+        "Impossible de mettre à jour le statut de la commande.",
+        4000
+      );
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -192,6 +451,11 @@ export default function AdminDashboard() {
       </div>
 
       <div className="mx-auto max-w-7xl px-4 py-8">
+        {error && (
+          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
 
         {/* Métriques réelles du dashboard */}
         {metrics && (
@@ -349,6 +613,135 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {orderStats && (
+          <>
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-charcoal">Période analysée</p>
+                <p className="text-xs text-slate">
+                  Du {formatRangeDate(orderStats.period.from)} au{" "}
+                  {formatRangeDate(orderStats.period.to)}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {STAT_RANGE_OPTIONS.map((range) => (
+                  <button
+                    key={range}
+                    onClick={() => setStatsRange(range)}
+                    className={`rounded-full px-4 py-1 text-xs font-semibold transition ${
+                      statsRange === range
+                        ? "bg-mint text-white"
+                        : "bg-gray-100 text-slate hover:bg-gray-200"
+                    }`}
+                  >
+                    {range} j
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-2 mb-8">
+              <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-charcoal">Top jouets loués</h3>
+                    <p className="text-xs text-gray-500">Derniers {orderStats.period.rangeDays} jours</p>
+                  </div>
+                  <Package className="h-5 w-5 text-mint" />
+                </div>
+                <div className="space-y-3">
+                  {orderStats.topToys.length === 0 && (
+                    <p className="text-sm text-gray-500">Pas encore de données.</p>
+                  )}
+                  {orderStats.topToys.map((toy) => (
+                    <div key={toy.toyId || toy.toyName} className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-charcoal">{toy.toyName}</p>
+                        <p className="text-xs text-gray-500">{toy.rentals} locations</p>
+                      </div>
+                      <p className="text-sm font-semibold text-mint">{toy.revenue.toFixed(0)} MAD</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-charcoal">Clients fidèles</h3>
+                    <p className="text-xs text-gray-500">Basé sur le volume de commandes</p>
+                  </div>
+                  <Users className="h-5 w-5 text-blue-500" />
+                </div>
+                <div className="space-y-3">
+                  {orderStats.loyalCustomers.length === 0 && (
+                    <p className="text-sm text-gray-500">Aucun client récurrent pour le moment.</p>
+                  )}
+                  {orderStats.loyalCustomers.map((client) => (
+                    <div key={client.customerId || client.customerName} className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-charcoal">{client.customerName}</p>
+                        <p className="text-xs text-gray-500">{client.orders} commandes</p>
+                      </div>
+                      <p className="text-sm font-semibold text-mint">{client.revenue.toFixed(0)} MAD</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-2 mb-8">
+              <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-charcoal">Clients à forte valeur</h3>
+                    <p className="text-xs text-gray-500">Top clients par chiffre d&apos;affaires</p>
+                  </div>
+                  <DollarSign className="h-5 w-5 text-emerald-500" />
+                </div>
+                <div className="space-y-3">
+                  {orderStats.topCustomers.length === 0 && (
+                    <p className="text-sm text-gray-500">Aucune donnée disponible.</p>
+                  )}
+                  {orderStats.topCustomers.map((client) => (
+                    <div key={`${client.customerId || client.customerName}-top`} className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-charcoal">{client.customerName}</p>
+                        <p className="text-xs text-gray-500">{client.orders} commandes</p>
+                      </div>
+                      <p className="text-sm font-semibold text-mint">{client.revenue.toFixed(0)} MAD</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-charcoal">Tendance revenus</h3>
+                    <p className="text-xs text-gray-500">Revenu par mois</p>
+                  </div>
+                  <TrendingUp className="h-5 w-5 text-purple-500" />
+                </div>
+                <div className="space-y-3">
+                  {orderStats.revenueByMonth.length === 0 && (
+                    <p className="text-sm text-gray-500">Pas suffisamment de données.</p>
+                  )}
+                  {orderStats.revenueByMonth.map((row) => (
+                    <div key={row.period} className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-charcoal">{row.period}</p>
+                        <p className="text-xs text-gray-500">{row.orders} commandes</p>
+                      </div>
+                      <p className="text-sm font-semibold text-mint">{row.revenue.toFixed(0)} MAD</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
         {/* Alertes réelles calculées */}
         {alerts.length > 0 && (
           <div className="mb-8">
@@ -393,6 +786,60 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+
+        <div className="mb-8 rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-charcoal">Messages de contact</h2>
+              <p className="text-xs text-gray-500">Derniers formulaires reçus</p>
+            </div>
+            <Link
+              href="/admin/contact-messages"
+              className="text-sm font-semibold text-mint hover:underline"
+            >
+              Voir tous les messages
+            </Link>
+          </div>
+          {contactError && (
+            <div className="mb-3 rounded-lg bg-coral/10 px-3 py-2 text-sm text-coral">
+              {contactError}
+            </div>
+          )}
+          {contactMessages.length === 0 && !contactError ? (
+            <p className="text-sm text-slate">
+              Aucun message récent. Encouragez les visiteurs à utiliser la page contact.
+            </p>
+          ) : (
+            <div className="divide-y divide-mist">
+              {contactMessages.map((message) => (
+                <div key={message.id} className="flex items-start justify-between gap-4 py-4">
+                  <div className="max-w-md">
+                    <p className="text-sm font-semibold text-charcoal">{message.name}</p>
+                    <p className="text-xs text-slate">{message.email}</p>
+                    <p
+                      className="mt-2 text-sm text-slate max-w-xs overflow-hidden text-ellipsis"
+                      style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}
+                    >
+                      {message.message}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getContactStatusStyles(
+                        message.status,
+                      )}`}
+                    >
+                      {getContactStatusLabel(message.status)}
+                    </span>
+                    <p className="mt-2 text-xs text-gray-500">
+                      {formatRangeDate(message.createdAt)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Commandes récentes */}
         {recentOrders.length > 0 && (
@@ -551,17 +998,27 @@ export default function AdminDashboard() {
                 <div className="mt-4 flex gap-2">
                   <button
                     onClick={() => updateOrderStatus(order.id, 'confirmed')}
-                    className="flex items-center gap-1 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600"
+                    disabled={updatingId === order.id}
+                    className="flex items-center gap-1 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <CheckCircle className="h-4 w-4" />
-                    Confirmer
+                    {updatingId === order.id ? (
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4" />
+                    )}
+                    {updatingId === order.id ? 'En cours...' : 'Confirmer'}
                   </button>
                   <button
                     onClick={() => updateOrderStatus(order.id, 'cancelled')}
-                    className="flex items-center gap-1 rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600"
+                    disabled={updatingId === order.id}
+                    className="flex items-center gap-1 rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <XCircle className="h-4 w-4" />
-                    Annuler
+                    {updatingId === order.id ? (
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    ) : (
+                      <XCircle className="h-4 w-4" />
+                    )}
+                    {updatingId === order.id ? 'En cours...' : 'Annuler'}
                   </button>
                 </div>
               )}
@@ -631,3 +1088,4 @@ export default function AdminDashboard() {
     </div>
   );
 }
+

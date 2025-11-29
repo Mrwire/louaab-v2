@@ -42,9 +42,13 @@ export class OrderService {
       if (!toy) {
         throw new NotFoundException(`Jouet ${item.toyId} non trouvé`);
       }
-      if (toy.availableQuantity < item.quantity) {
+      const available = Number(toy.availableQuantity ?? 0);
+      const physicalStock = Number(toy.stockQuantity ?? 0);
+      const effectiveAvailable = available > 0 ? available : physicalStock;
+
+      if (effectiveAvailable < item.quantity) {
         throw new BadRequestException(
-          `Stock insuffisant pour ${toy.name}. Disponible: ${toy.availableQuantity}`,
+          `Stock insuffisant pour ${toy.name}. Disponible: ${effectiveAvailable}`,
         );
       }
     }
@@ -57,7 +61,7 @@ export class OrderService {
       ...orderData,
       orderNumber,
       customer,
-      status: OrderStatus.CONFIRMED,
+      status: OrderStatus.DRAFT,
     });
 
     const savedOrder = await this.orderRepository.save(order);
@@ -78,16 +82,12 @@ export class OrderService {
         quantity: itemDto.quantity,
         rentalPrice: itemDto.rentalPrice,
         rentalDurationDays: itemDto.rentalDurationDays,
+        rentalStartDate: itemDto.rentalStartDate ? new Date(itemDto.rentalStartDate) : new Date(),
         conditionBefore: toy.condition,
       });
 
       await this.orderItemRepository.save(orderItem);
 
-      // Update toy status and availability
-      toy.status = ToyStatus.RESERVED;
-      toy.availableQuantity -= itemDto.quantity;
-      toy.timesRented += itemDto.quantity;
-      await this.toyRepository.save(toy);
     }
 
     // Create delivery record
@@ -122,6 +122,7 @@ export class OrderService {
       .leftJoinAndSelect('order.customer', 'customer')
       .leftJoinAndSelect('order.items', 'items')
       .leftJoinAndSelect('items.toy', 'toy')
+      .leftJoinAndSelect('toy.images', 'toyImages')
       .leftJoinAndSelect('order.deliveries', 'deliveries');
 
     if (customerId) {
@@ -198,40 +199,68 @@ export class OrderService {
 
   async updateStatus(id: string, status: OrderStatus): Promise<Order> {
     const order = await this.findOne(id);
+    const previousStatus = order.status;
     order.status = status;
 
-    // Handle toy status changes based on order status
-    if (status === OrderStatus.DELIVERED) {
-      // Update toys to RENTED
+    if (status === OrderStatus.CONFIRMED) {
+      if (previousStatus !== OrderStatus.DRAFT) {
+        throw new BadRequestException('Confirmation impossible: statut actuel non pending/draft');
+      }
+      // Décrémentation stock à la confirmation
       for (const item of order.items) {
-        const toy = await this.toyRepository.findOne({
-          where: { id: item.toy.id },
-        });
+        const toy = await this.toyRepository.findOne({ where: { id: item.toy.id } });
+        if (!toy) {
+          throw new NotFoundException(`Jouet ${item.toy.id} introuvable`);
+        }
+        const physicalStock = Number(toy.stockQuantity ?? 0);
+        const available = Number(toy.availableQuantity ?? 0);
+        const baseAvailable = available > 0 ? available : physicalStock;
+        if (baseAvailable < item.quantity) {
+          throw new BadRequestException(`Stock insuffisant pour ${toy.name}. Disponible: ${baseAvailable}`);
+        }
+      }
+      for (const item of order.items) {
+        const toy = await this.toyRepository.findOne({ where: { id: item.toy.id } });
+        if (toy) {
+          const physicalStock = Number(toy.stockQuantity ?? 0);
+          const available = Number(toy.availableQuantity ?? 0);
+          const baseAvailable = available > 0 ? available : physicalStock;
+          const remaining = Math.max(0, baseAvailable - item.quantity);
+          toy.availableQuantity = physicalStock > 0 ? Math.min(remaining, physicalStock) : remaining;
+          toy.status = ToyStatus.RESERVED;
+          toy.timesRented = Math.max(0, (toy.timesRented ?? 0) + item.quantity);
+          await this.toyRepository.save(toy);
+        }
+      }
+    } else if (status === OrderStatus.DELIVERED) {
+      for (const item of order.items) {
+        const toy = await this.toyRepository.findOne({ where: { id: item.toy.id } });
         if (toy) {
           toy.status = ToyStatus.RENTED;
           await this.toyRepository.save(toy);
         }
       }
     } else if (status === OrderStatus.RETURNED) {
-      // Mark toys for cleaning
       for (const item of order.items) {
-        const toy = await this.toyRepository.findOne({
-          where: { id: item.toy.id },
-        });
+        const toy = await this.toyRepository.findOne({ where: { id: item.toy.id } });
         if (toy) {
           toy.status = ToyStatus.CLEANING;
+          const currentAvailable = Number(toy.availableQuantity || 0);
+          const maxStock = Number(toy.stockQuantity || currentAvailable);
+          toy.availableQuantity = Math.min(currentAvailable + item.quantity, maxStock || currentAvailable + item.quantity);
           await this.toyRepository.save(toy);
         }
       }
     } else if (status === OrderStatus.COMPLETED) {
-      // Return toys to available
       for (const item of order.items) {
-        const toy = await this.toyRepository.findOne({
-          where: { id: item.toy.id },
-        });
+        const toy = await this.toyRepository.findOne({ where: { id: item.toy.id } });
         if (toy) {
           toy.status = ToyStatus.AVAILABLE;
-          toy.availableQuantity += item.quantity;
+          if (previousStatus !== OrderStatus.RETURNED) {
+            const currentAvailable = Number(toy.availableQuantity || 0);
+            const maxStock = Number(toy.stockQuantity || currentAvailable);
+            toy.availableQuantity = Math.min(currentAvailable + item.quantity, maxStock || currentAvailable + item.quantity);
+          }
           await this.toyRepository.save(toy);
         }
       }
@@ -269,11 +298,36 @@ export class OrderService {
     return this.findOne(id);
   }
 
+  async reset(id: string): Promise<Order> {
+    const order = await this.findOne(id);
+    const previousStatus = order.status;
+
+    for (const item of order.items) {
+      const toy = await this.toyRepository.findOne({ where: { id: item.toy.id } });
+      if (!toy) {
+        continue;
+      }
+      // Si la commande avait décrémenté le stock (confirmed ou delivered), on récrédite
+      if ([OrderStatus.CONFIRMED, OrderStatus.DELIVERED].includes(previousStatus)) {
+        const physical = Number(toy.stockQuantity ?? 0);
+        const currentAvailable = Number(toy.availableQuantity ?? 0);
+        const credited = currentAvailable + item.quantity;
+        toy.availableQuantity = physical > 0 ? Math.min(credited, physical) : credited;
+      }
+      // Rétablir le statut dispo et corriger timesRented
+      toy.status = ToyStatus.AVAILABLE;
+      toy.timesRented = Math.max(0, (toy.timesRented ?? 0) - item.quantity);
+      await this.toyRepository.save(toy);
+    }
+
+    order.status = OrderStatus.DRAFT;
+    await this.orderRepository.save(order);
+    return this.findOne(id);
+  }
+
   private async generateOrderNumber(): Promise<string> {
-    const date = new Date();
-    const year = date.getFullYear();
     const count = await this.orderRepository.count();
-    return `CMD-${year}-${String(count + 1).padStart(4, '0')}`;
+    return `LOUAAB-N-${String(count + 1).padStart(4, '0')}`;
   }
 
   async getStats() {

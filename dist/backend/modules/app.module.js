@@ -20,6 +20,12 @@ const category_module_1 = require("./category.module");
 const pack_module_1 = require("./pack.module");
 const faq_module_1 = require("./faq.module");
 const contact_module_1 = require("./contact.module");
+const sync_module_1 = require("./sync.module");
+const admin_ui_module_1 = require("./admin-ui.module");
+const bootstrap_service_1 = require("../services/bootstrap.service");
+const age_range_entity_1 = require("../entities/age-range.entity");
+const toy_category_entity_1 = require("../entities/toy-category.entity");
+const pack_entity_1 = require("../entities/pack.entity");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -58,6 +64,10 @@ exports.AppModule = AppModule = __decorate([
             pack_module_1.PackModule,
             faq_module_1.FAQModule,
             contact_module_1.ContactModule,
+            sync_module_1.SyncModule,
+            admin_ui_module_1.AdminUiModule,
+            typeorm_1.TypeOrmModule.forFeature([age_range_entity_1.AgeRange, toy_category_entity_1.ToyCategory, pack_entity_1.Pack]),
         ],
+        providers: [bootstrap_service_1.BootstrapService],
     })
 ], AppModule);

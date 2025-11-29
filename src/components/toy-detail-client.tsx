@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Calendar, Clock, Plus, Minus, ShoppingCart, TrendingUp, X, Check } from "lucide-react";
 import { useCart } from "@/contexts/cart-context";
 import { ToyData } from "@/lib/toys-data";
+import { formatDateInput } from "@/lib/date";
 import PricingSelector, { PricingOption } from "./pricing-selector";
 import DatePicker from "./date-picker";
+
+const TOY_PREF_KEY = "louaab-toy-preferences";
 
 interface ToyDetailClientProps {
   toy: ToyData;
@@ -17,15 +20,76 @@ interface ToyDetailClientProps {
 export default function ToyDetailClient({ toy }: ToyDetailClientProps) {
   const { items, addToCart, removeFromCart, updateQuantity } = useCart();
   const [selectedPricingType, setSelectedPricingType] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(formatDateInput());
 
   const [quantity, setQuantity] = useState(1);
   const [isAdding, setIsAdding] = useState(false);
 
-  // Créer l'ID unique pour cet item
-  const itemId = `${toy.id}-${selectedPricingType}`;
-  const cartItem = items.find(item => item.id === itemId);
+  const toyKey = toy.backendId ?? String(toy.id);
+  const cartItemByDuration = items.find(item => item.id === `${toyKey}-${selectedPricingType}`);
+  const cartItemFallback = items.find(item => (item.toy.backendId ?? String(item.toy.id)) === toyKey);
+  const cartItem = cartItemByDuration ?? cartItemFallback;
+  const itemId = cartItem?.id ?? `${toyKey}-${selectedPricingType}`;
   const isInCart = !!cartItem;
+  const availableStock = Math.max(
+    0,
+    Number(
+      toy.stockQuantity ??
+        toy.availableQuantity ??
+        toy.stock ??
+        (cartItem?.toy?.stockQuantity ?? cartItem?.toy?.stock)
+    ) || 0
+  );
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(TOY_PREF_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      const prefs = data?.[toyKey];
+      if (prefs) {
+        if (prefs.duration) {
+          setSelectedPricingType(prefs.duration);
+        }
+        if (prefs.startDate) {
+          setStartDate(prefs.startDate);
+        }
+        if (prefs.quantity) {
+          setQuantity(Math.max(1, Number(prefs.quantity) || 1));
+        }
+      }
+    } catch (error) {
+      console.warn("Impossible de charger les préférences jouet:", error);
+    }
+  }, [toyKey]);
+
+  useEffect(() => {
+    if (!cartItem) return;
+    if (cartItem.duration && cartItem.duration !== selectedPricingType) {
+      setSelectedPricingType(cartItem.duration as 'daily' | 'weekly' | 'monthly');
+    }
+    if (cartItem.startDate) {
+      setStartDate(cartItem.startDate);
+    }
+    if (cartItem.quantity && cartItem.quantity !== quantity) {
+      setQuantity(cartItem.quantity);
+    }
+  }, [cartItem]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(TOY_PREF_KEY);
+      const prefs = raw ? JSON.parse(raw) : {};
+      prefs[toyKey] = {
+        duration: selectedPricingType,
+        startDate,
+        quantity,
+      };
+      localStorage.setItem(TOY_PREF_KEY, JSON.stringify(prefs));
+    } catch (error) {
+      console.warn("Impossible d'enregistrer les préférences jouet:", error);
+    }
+  }, [selectedPricingType, startDate, quantity, toyKey]);
 
   // Créer les options de prix basées sur les données du jouet (depuis le backend ou valeurs par défaut)
   const dailyPrice = toy.rentalPriceDaily || parseFloat(toy.price?.replace(/[^\d.]/g, '') || '25');
@@ -106,10 +170,11 @@ export default function ToyDetailClient({ toy }: ToyDetailClientProps) {
   };
 
   const handleAddToCart = async () => {
+    if (availableStock <= 0) return;
     setIsAdding(true);
     
     // Ajouter au panier avec les paramètres sélectionnés
-    addToCart(toy, selectedPricingType, startDate);
+    addToCart(toy, selectedPricingType, startDate, quantity);
     
     // Effet confetti
     const confettiColors = ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0'];
@@ -151,9 +216,11 @@ export default function ToyDetailClient({ toy }: ToyDetailClientProps) {
   };
 
   const handleUpdateQuantity = (newQuantity: number) => {
-    setQuantity(newQuantity);
+    const capped = availableStock > 0 ? Math.min(availableStock, newQuantity) : 0;
+    const safeQuantity = Math.max(1, capped || 1);
+    setQuantity(safeQuantity);
     if (isInCart) {
-      updateQuantity(itemId, newQuantity);
+      updateQuantity(itemId, safeQuantity);
     }
   };
 
@@ -165,7 +232,7 @@ export default function ToyDetailClient({ toy }: ToyDetailClientProps) {
         selectedType={selectedPricingType}
         onTypeChange={setSelectedPricingType}
         quantity={quantity}
-        onQuantityChange={setQuantity}
+        onQuantityChange={handleUpdateQuantity}
       />
 
       {/* Configuration Section */}
@@ -181,7 +248,7 @@ export default function ToyDetailClient({ toy }: ToyDetailClientProps) {
             value={startDate}
             onChange={setStartDate}
             label="Date de début"
-            min={new Date().toISOString().split('T')[0]}
+            min={formatDateInput()}
             required
           />
 
@@ -190,12 +257,27 @@ export default function ToyDetailClient({ toy }: ToyDetailClientProps) {
         </div>
       </div>
 
+      <div className="rounded-2xl border border-mist bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-slate">
+            Total ({quantity} {quantity > 1 ? "articles" : "article"})
+          </p>
+          <p className="text-xl font-bold text-charcoal">
+            {new Intl.NumberFormat("fr-MA", {
+              style: "currency",
+              currency: "MAD",
+              maximumFractionDigits: 0,
+            }).format(calculatePrice())}
+          </p>
+        </div>
+      </div>
+
       {/* CTA Buttons */}
       <div className="flex flex-col gap-3 sm:flex-row">
         {!isInCart ? (
           <button
             onClick={handleAddToCart}
-            disabled={isAdding}
+            disabled={isAdding || availableStock <= 0}
             className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-mint px-8 py-4 text-white font-semibold transition-all hover:bg-mint/90 disabled:opacity-50 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
           >
             {isAdding ? (
@@ -205,8 +287,14 @@ export default function ToyDetailClient({ toy }: ToyDetailClientProps) {
               </>
             ) : (
               <>
-                <ShoppingCart className="h-5 w-5" />
-                <span>Ajouter au panier</span>
+                {availableStock > 0 ? (
+                  <>
+                    <ShoppingCart className="h-5 w-5" />
+                    <span>Ajouter au panier</span>
+                  </>
+                ) : (
+                  <span className="text-sm font-semibold">Rupture de stock</span>
+                )}
               </>
             )}
           </button>

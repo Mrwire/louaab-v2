@@ -1,14 +1,15 @@
-"use client";
+﻿"use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useCart } from "@/contexts/cart-context";
 import { PageShell } from "@/components/page-shell";
 import { SectionHeading } from "@/components/section-heading";
-import { OrderManager, Order } from "@/lib/orders";
-import { Calendar, Clock, Trash2, CheckCircle, ArrowLeft } from "lucide-react";
+import { Clock, Trash2, CheckCircle, ArrowLeft } from "lucide-react";
 import DatePicker from "@/components/date-picker";
+import { createPublicOrder } from "@/lib/api/orders";
+import { formatDateInput } from "@/lib/date";
 
 const durations = [
   { value: "daily", label: "1 jour", multiplier: 1 },
@@ -16,16 +17,40 @@ const durations = [
   { value: "monthly", label: "1 mois", multiplier: 15 },
 ];
 
+const toNumber = (value: any) => {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
+const getUnitPrice = (item: ReturnType<typeof useCart>["items"][number]) => {
+  if (item.duration === "daily") return toNumber(item.toy.rentalPriceDaily);
+  if (item.duration === "weekly") return toNumber(item.toy.rentalPriceWeekly);
+  if (item.duration === "monthly") return toNumber(item.toy.rentalPriceMonthly);
+  return toNumber(item.toy.rentalPriceDaily);
+};
+
 export default function CheckoutPage() {
   const { items, removeFromCart, updateQuantity, getTotalPrice, clearCart, updateItem } = useCart();
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryCity, setDeliveryCity] = useState("");
   const [deliveryPostalCode, setDeliveryPostalCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSubmitted, setOrderSubmitted] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (orderSubmitted) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [orderSubmitted]);
 
   const handleUpdateItem = (itemId: string, field: string, value: string) => {
     const item = items.find(item => item.id === itemId);
@@ -44,6 +69,17 @@ export default function CheckoutPage() {
     }
   };
 
+  const durationToDays = (value: string) => {
+    switch (value) {
+      case "daily":
+        return 1;
+      case "monthly":
+        return 30;
+      default:
+        return 7;
+    }
+  };
+
   const handleSubmit = async () => {
     if (!customerName || !customerPhone || !deliveryAddress || !deliveryCity) {
       alert("Veuillez remplir toutes les informations obligatoires");
@@ -58,60 +94,54 @@ export default function CheckoutPage() {
     setIsSubmitting(true);
 
     try {
-      // Créer la commande
-      const orderId = OrderManager.generateOrderId();
-      const orderItems = items.map(item => {
-        // Calcul basé sur les champs de prix spécifiques si présents
-        let unitPrice = 0;
-        if (item.duration === 'daily' && typeof item.toy.rentalPriceDaily === 'number') {
-          unitPrice = item.toy.rentalPriceDaily;
-        } else if (item.duration === 'weekly' && typeof item.toy.rentalPriceWeekly === 'number') {
-          unitPrice = item.toy.rentalPriceWeekly;
-        } else if (item.duration === 'monthly' && typeof item.toy.rentalPriceMonthly === 'number') {
-          unitPrice = item.toy.rentalPriceMonthly;
-        } else {
-          // Fallback: parser la chaîne "price" (souvent hebdomadaire)
-          unitPrice = parseFloat(item.toy.price?.replace(/[^\d.]/g, '') || '0');
-          if (item.duration === 'monthly') unitPrice = unitPrice * (15 / 4.8);
-        }
+      setSubmissionError(null);
+      const orderItems = items.map((item) => {
+        const unitPrice = getUnitPrice(item);
 
-        const itemTotal = unitPrice * item.quantity;
-        const durationLabel = durations.find(d => d.value === item.duration)?.label || item.duration;
-        
+        const durationLabel = durations.find((d) => d.value === item.duration)?.label || item.duration;
+        const toyKey = String(item.toy.backendId ?? item.toy.id);
+
         return {
-          toyName: item.toy.name,
-          duration: durationLabel,
-          startDate: item.startDate,
+          toyId: toyKey,
           quantity: item.quantity,
-          price: itemTotal
+          unitPrice,
+          rentalDurationDays: durationToDays(item.duration),
+          startDate: item.startDate,
+          durationLabel,
         };
       });
 
-      const order: Order = {
-        id: orderId,
+      const depositAmount = items.reduce((sum, item) => {
+        const deposit = item.toy.depositAmount ?? 0;
+        return sum + deposit * item.quantity;
+      }, 0);
+
+      const payload = {
         customerName,
         customerPhone,
-        deliveryAddress: `${deliveryAddress}, ${deliveryPostalCode} ${deliveryCity}`,
+        customerEmail: customerEmail || undefined,
+        deliveryAddress,
+        deliveryCity,
+        deliveryPostalCode: deliveryPostalCode || undefined,
+        deliveryDate: items[0]?.startDate,
         items: orderItems,
-        totalPrice: getTotalPrice(),
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-        notes: `Commande créée le ${new Date().toLocaleDateString('fr-FR')}`
+        totalAmount: Number(getTotalPrice().toFixed(2)),
+        depositAmount,
+        notes: `Commande en ligne - ${customerName}`,
       };
 
-      // Sauvegarder la commande
-      OrderManager.saveOrder(order);
+      const createdOrder = await createPublicOrder(payload);
       
       // Vider le panier
       clearCart();
       
       // Afficher la confirmation
-      setOrderId(orderId);
+      setOrderId(createdOrder?.orderNumber || createdOrder?.id || null);
       setOrderSubmitted(true);
       
     } catch (error) {
-      console.error('Erreur lors de la création de la commande:', error);
-      alert('Une erreur est survenue. Veuillez réessayer.');
+      console.error("Erreur lors de la création de la commande:", error);
+      setSubmissionError(error instanceof Error ? error.message : "Une erreur est survenue. Veuillez réessayer.");
     } finally {
       setIsSubmitting(false);
     }
@@ -175,7 +205,7 @@ export default function CheckoutPage() {
       <PageShell>
         <div className="mx-auto max-w-4xl px-4 py-16">
           <div className="text-center">
-            <div className="text-6xl mb-6">🛒</div>
+            <div className="text-6xl mb-6">ðŸ›’</div>
             <h1 className="text-3xl font-bold text-charcoal mb-4">
               Votre panier est vide
             </h1>
@@ -214,6 +244,13 @@ export default function CheckoutPage() {
           </p>
         </div>
 
+
+        {submissionError && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {submissionError}
+          </div>
+        )}
+
         <div className="grid gap-8 lg:grid-cols-[2fr,1fr]">
           {/* Liste des articles */}
           <div className="space-y-6">
@@ -223,24 +260,8 @@ export default function CheckoutPage() {
             />
 
             {items.map((item) => {
-              const basePrice = parseFloat(item.toy.price?.replace(/[^\d.]/g, '') || '0');
-              
-              // Convertir la durée en multiplicateur
-              let durationMultiplier = 1;
-              if (item.duration === 'daily') {
-                durationMultiplier = 1;
-              } else if (item.duration === 'weekly') {
-                durationMultiplier = 4.8;
-              } else if (item.duration === 'monthly') {
-                durationMultiplier = 15;
-              } else {
-                const parsed = parseFloat(item.duration);
-                if (!isNaN(parsed)) {
-                  durationMultiplier = parsed;
-                }
-              }
-              
-              const itemTotal = basePrice * durationMultiplier * item.quantity;
+              const unitPrice = getUnitPrice(item);
+              const itemTotal = unitPrice * item.quantity;
               const durationLabel = durations.find(d => d.value === item.duration)?.label || item.duration;
 
               return (
@@ -270,7 +291,7 @@ export default function CheckoutPage() {
                         {/* Durée */}
                         <div>
                           <label className="block text-xs font-medium text-slate mb-1">
-                            Durée
+                             Durée
                           </label>
                           <select
                             value={item.duration}
@@ -291,7 +312,7 @@ export default function CheckoutPage() {
                             value={item.startDate}
                             onChange={(date) => handleUpdateItem(item.id, 'startDate', date)}
                             label="Date"
-                            min={new Date().toISOString().split('T')[0]}
+                            min={formatDateInput()}
                             required
                             className="text-xs"
                           />
@@ -350,6 +371,11 @@ export default function CheckoutPage() {
                 Vos informations
               </h3>
               <div className="space-y-4">
+                {submissionError && (
+                  <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">
+                    {submissionError}
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-slate mb-2">
                     Nom complet
@@ -371,6 +397,18 @@ export default function CheckoutPage() {
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(e.target.value)}
                     placeholder="Ex: 06 12 34 56 78"
+                    className="w-full rounded-lg border border-gray-200 px-4 py-3 text-charcoal transition focus:border-mint focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate mb-2">
+                    Email (optionnel)
+                  </label>
+                  <input
+                    type="email"
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
+                    placeholder="exemple@louaab.ma"
                     className="w-full rounded-lg border border-gray-200 px-4 py-3 text-charcoal transition focus:border-mint focus:outline-none"
                   />
                 </div>

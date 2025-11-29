@@ -1,125 +1,197 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { OrderManager, Order } from "@/lib/orders";
-import { 
-  ShoppingCart, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
-  Eye, 
-  Phone, 
+import { useEffect, useState, type ReactNode } from "react";
+import {
+  fetchAdminOrderStats,
+  fetchAdminOrders,
+  resetAdminOrder,
+  updateAdminOrderStatus,
+  type AdminOrderStats,
+} from "@/lib/api/admin-orders";
+import type { Order } from "@/lib/orders";
+import { OrderManager } from "@/lib/orders";
+import {
   Calendar,
-  User,
-  Package,
+  CheckCircle,
+  Clock,
   DollarSign,
+  Eye,
+  Package,
+  Phone,
+  RefreshCw,
   Search,
-  Filter,
-  MoreVertical,
-  MessageCircle,
-  PhoneCall,
-  Mail,
-  MapPin,
+  Shield,
+  ShoppingCart,
   Truck,
-  AlertTriangle
+  User,
+  XCircle,
 } from "lucide-react";
+import Image from "next/image";
+
+type StatusKey = Order["status"];
+
+const statusLabels: Record<StatusKey, string> = {
+  pending: "En attente",
+  confirmed: "Confirmée",
+  delivered: "Livrée",
+  returned: "Restituée",
+  completed: "Terminée",
+  cancelled: "Annulée",
+};
+
+const statusColors: Record<StatusKey, string> = {
+  pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
+  confirmed: "bg-blue-100 text-blue-800 border-blue-200",
+  delivered: "bg-indigo-100 text-indigo-800 border-indigo-200",
+  returned: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  completed: "bg-green-100 text-green-800 border-green-200",
+  cancelled: "bg-red-100 text-red-800 border-red-200",
+};
+
+const statusIcon = (status: StatusKey) => {
+  switch (status) {
+    case "pending":
+      return <Clock className="h-4 w-4" />;
+    case "confirmed":
+      return <CheckCircle className="h-4 w-4" />;
+    case "delivered":
+      return <Truck className="h-4 w-4" />;
+    case "returned":
+      return <Shield className="h-4 w-4" />;
+    case "completed":
+      return <CheckCircle className="h-4 w-4" />;
+    case "cancelled":
+      return <XCircle className="h-4 w-4" />;
+    default:
+      return <Clock className="h-4 w-4" />;
+  }
+};
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<AdminOrderStats | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [sortBy, setSortBy] = useState("newest");
+  const [filterStatus, setFilterStatus] = useState<StatusKey | "all">("all");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "price_high" | "price_low">("newest");
+
+  const isLocalOrder = (order?: Order | null) => !order?.id || order.id.startsWith("local");
 
   useEffect(() => {
-    loadOrders();
+    void loadOrders();
   }, []);
 
-  const loadOrders = () => {
+  const loadOrders = async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+    setError(null);
+    silent ? setIsRefreshing(true) : setLoading(true);
+
     try {
-      const allOrders = OrderManager.getAllOrders();
-      setOrders(allOrders);
-      setLoading(false);
-    } catch (error) {
-      console.error('Erreur lors du chargement des commandes:', error);
-      setLoading(false);
+      const [ordersData, statsData] = await Promise.all([fetchAdminOrders(), fetchAdminOrderStats()]);
+      setOrders(ordersData);
+      setStats(statsData);
+    } catch (err) {
+      console.error("Erreur lors du chargement des commandes:", err);
+      const cached = OrderManager.getAllOrders();
+      if (cached.length) {
+        setOrders(cached);
+        setError("API indisponible, affichage des commandes locales");
+      } else {
+        setError(err instanceof Error ? err.message : "Impossible de charger les commandes");
+      }
+    } finally {
+      silent ? setIsRefreshing(false) : setLoading(false);
     }
   };
 
-  const updateOrderStatus = (orderId: string, newStatus: Order['status']) => {
-    OrderManager.updateOrderStatus(orderId, newStatus);
-    setOrders(prev => prev.map(order => 
-      order.id === orderId ? { ...order, status: newStatus } : order
-    ));
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'confirmed': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'completed': return 'bg-green-100 text-green-800 border-green-200';
-      case 'cancelled': return 'bg-red-100 text-red-800 border-red-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+  const updateOrderStatus = async (orderId: string, newStatus: StatusKey) => {
+    setUpdatingId(orderId);
+    setError(null);
+    try {
+      let target = orders.find((o) => o.id === orderId);
+      if (isLocalOrder(target)) {
+        await loadOrders({ silent: true });
+        target = orders.find((o) => o.id === orderId);
+        if (isLocalOrder(target)) {
+          setError('Commande locale : cliquez sur "Actualiser" pour récupérer l’ID backend avant mise à jour.');
+          return;
+        }
+      }
+      const updatedOrder = await updateAdminOrderStatus(orderId, newStatus);
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? updatedOrder : o)));
+      setSelectedOrder((prev) => (prev && prev.id === orderId ? updatedOrder : prev));
+      await loadOrders({ silent: true });
+    } catch (err) {
+      console.error("Impossible de mettre à jour la commande:", err);
+      setError(err instanceof Error ? err.message : "Impossible de mettre à jour le statut de la commande");
+    } finally {
+      setUpdatingId(null);
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'pending': return <Clock className="h-4 w-4" />;
-      case 'confirmed': return <CheckCircle className="h-4 w-4" />;
-      case 'completed': return <CheckCircle className="h-4 w-4" />;
-      case 'cancelled': return <XCircle className="h-4 w-4" />;
-      default: return <Clock className="h-4 w-4" />;
-    }
+  const confirmAndSendToReturns = async (orderId: string) => {
+    // Confirme (décrémente stock) puis passe en livré pour apparaître dans /returns
+    await updateOrderStatus(orderId, "confirmed");
+    await updateOrderStatus(orderId, "delivered");
   };
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'pending': return 'En attente';
-      case 'confirmed': return 'Confirmée';
-      case 'completed': return 'Terminée';
-      case 'cancelled': return 'Annulée';
-      default: return 'Inconnu';
+  const resetOrder = async (orderId: string) => {
+    setUpdatingId(orderId);
+    setError(null);
+    try {
+      const updatedOrder = await resetAdminOrder(orderId);
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? updatedOrder : o)));
+      setSelectedOrder((prev) => (prev && prev.id === orderId ? updatedOrder : prev));
+    } catch (err) {
+      console.error("Impossible de réinitialiser la commande:", err);
+      setError(err instanceof Error ? err.message : "Impossible de réinitialiser la commande");
+    } finally {
+      setUpdatingId(null);
     }
   };
 
   const filteredAndSortedOrders = orders
-    .filter(order => {
-      const matchesSearch = 
-        order.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.customerPhone.includes(searchQuery) ||
-        order.id.toLowerCase().includes(searchQuery.toLowerCase());
+    .filter((order) => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch =
+        order.customerName.toLowerCase().includes(q) ||
+        (order.customerPhone || "").toLowerCase().includes(q) ||
+        (order.id || "").toLowerCase().includes(q) ||
+        (order.orderNumber || "").toLowerCase().includes(q);
       const matchesStatus = filterStatus === "all" || order.status === filterStatus;
       return matchesSearch && matchesStatus;
     })
     .sort((a, b) => {
       switch (sortBy) {
-        case "newest": return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        case "oldest": return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        case "price_high": return b.totalPrice - a.totalPrice;
-        case "price_low": return a.totalPrice - b.totalPrice;
-        default: return 0;
+        case "newest":
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        case "oldest":
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        case "price_high":
+          return b.totalPrice - a.totalPrice;
+        case "price_low":
+          return a.totalPrice - b.totalPrice;
+        default:
+          return 0;
       }
     });
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
-  };
 
-  const getTotalRevenue = () => {
-    return orders.reduce((sum, order) => sum + order.totalPrice, 0);
-  };
-
-  const getPendingOrdersCount = () => {
-    return orders.filter(order => order.status === 'pending').length;
-  };
+  const statusCount = (status: StatusKey) =>
+    stats?.statusBreakdown?.[status] ?? orders.filter((o) => o.status === status).length;
 
   if (loading) {
     return (
@@ -134,93 +206,36 @@ export default function OrdersPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Admin Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="mx-auto max-w-7xl px-4 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <a 
-                href="/admin/dashboard" 
-                className="text-sm text-gray-600 hover:text-mint transition-colors"
+            <div>
+              <p className="text-xs uppercase font-semibold text-slate">Tableau de bord</p>
+              <h1 className="text-2xl font-bold text-charcoal">Commandes</h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => loadOrders({ silent: true })}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
-                ← Dashboard
-              </a>
-              <div className="h-6 w-px bg-gray-300"></div>
-              <div>
-                <h1 className="text-xl font-bold text-charcoal">Gestion des Commandes</h1>
-                <p className="text-sm text-gray-600">Gérez toutes les commandes clients</p>
-              </div>
+                <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                Actualiser
+              </button>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-sm text-gray-600">
-                {orders.length} commandes • {getPendingOrdersCount()} en attente
-              </div>
-            </div>
+          </div>
+
+          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard title="Total commandes" value={orders.length} icon={<ShoppingCart className="h-5 w-5" />} />
+            <StatCard title="En attente" value={statusCount("pending")} icon={<Clock className="h-5 w-5" />} />
+            <StatCard title="Confirmées" value={statusCount("confirmed")} icon={<CheckCircle className="h-5 w-5" />} />
+            <StatCard title="Terminées" value={statusCount("completed")} icon={<Shield className="h-5 w-5" />} />
           </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-8">
-        {/* Stats Cards */}
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-          <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate">Commandes en attente</p>
-                <p className="text-2xl font-bold text-charcoal">
-                  {orders.filter(o => o.status === 'pending').length}
-                </p>
-              </div>
-              <div className="rounded-full bg-yellow-100 p-3">
-                <Clock className="h-6 w-6 text-yellow-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate">Commandes confirmées</p>
-                <p className="text-2xl font-bold text-charcoal">
-                  {orders.filter(o => o.status === 'confirmed').length}
-                </p>
-              </div>
-              <div className="rounded-full bg-blue-100 p-3">
-                <CheckCircle className="h-6 w-6 text-blue-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate">Commandes terminées</p>
-                <p className="text-2xl font-bold text-charcoal">
-                  {orders.filter(o => o.status === 'completed').length}
-                </p>
-              </div>
-              <div className="rounded-full bg-green-100 p-3">
-                <CheckCircle className="h-6 w-6 text-green-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate">Chiffre d'affaires</p>
-                <p className="text-2xl font-bold text-charcoal">
-                  {getTotalRevenue().toFixed(0)} MAD
-                </p>
-              </div>
-              <div className="rounded-full bg-mint/10 p-3">
-                <DollarSign className="h-6 w-6 text-mint" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Filters */}
+      <div className="mx-auto max-w-7xl px-4 py-6">
         <div className="mb-6 rounded-xl bg-white p-4 shadow-sm border border-gray-100">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
@@ -236,27 +251,29 @@ export default function OrdersPage() {
                 />
               </div>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Statut</label>
               <select
                 value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
+                onChange={(e) => setFilterStatus(e.target.value as StatusKey | "all")}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-mint focus:border-mint"
               >
                 <option value="all">Tous les statuts</option>
                 <option value="pending">En attente</option>
                 <option value="confirmed">Confirmées</option>
+                <option value="delivered">Livrées</option>
+                <option value="returned">Restituées</option>
                 <option value="completed">Terminées</option>
                 <option value="cancelled">Annulées</option>
               </select>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Trier par</label>
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
+                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-mint focus:border-mint"
               >
                 <option value="newest">Plus récentes</option>
@@ -265,7 +282,7 @@ export default function OrdersPage() {
                 <option value="price_low">Prix bas</option>
               </select>
             </div>
-            
+
             <div className="flex items-end">
               <button
                 onClick={() => {
@@ -281,7 +298,6 @@ export default function OrdersPage() {
           </div>
         </div>
 
-        {/* Orders List */}
         <div className="space-y-4">
           {filteredAndSortedOrders.map((order) => (
             <div key={order.id} className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
@@ -291,14 +307,16 @@ export default function OrdersPage() {
                     <ShoppingCart className="h-5 w-5 text-mint" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-charcoal">{order.id}</h3>
+                    <h3 className="font-semibold text-charcoal">{order.orderNumber || order.id}</h3>
                     <p className="text-sm text-slate">{formatDate(order.createdAt)}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium border ${getStatusColor(order.status)}`}>
-                    {getStatusIcon(order.status)}
-                    {getStatusLabel(order.status)}
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium border ${statusColors[order.status]}`}
+                  >
+                    {statusIcon(order.status)}
+                    {statusLabels[order.status]}
                   </span>
                   <button
                     onClick={() => setSelectedOrder(order)}
@@ -311,85 +329,53 @@ export default function OrdersPage() {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-gray-400" />
-                  <div>
-                    <p className="text-xs text-slate">Client</p>
-                    <p className="text-sm font-medium text-charcoal">{order.customerName}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-gray-400" />
-                  <div>
-                    <p className="text-xs text-slate">Téléphone</p>
-                    <p className="text-sm font-medium text-charcoal">{order.customerPhone}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Package className="h-4 w-4 text-gray-400" />
-                  <div>
-                    <p className="text-xs text-slate">Articles</p>
-                    <p className="text-sm font-medium text-charcoal">{order.items.length}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <DollarSign className="h-4 w-4 text-gray-400" />
-                  <div>
-                    <p className="text-xs text-slate">Total</p>
-                    <p className="text-sm font-medium text-charcoal">{order.totalPrice} MAD</p>
-                  </div>
-                </div>
+                <InfoRow icon={<User className="h-4 w-4 text-gray-400" />} label="Client" value={order.customerName} />
+                <InfoRow icon={<Phone className="h-4 w-4 text-gray-400" />} label="Téléphone" value={order.customerPhone} />
+                <InfoRow icon={<Package className="h-4 w-4 text-gray-400" />} label="Articles" value={`${order.items.length}`} />
+                <InfoRow icon={<DollarSign className="h-4 w-4 text-gray-400" />} label="Total" value={`${order.totalPrice} MAD`} />
               </div>
 
-              {order.status === 'pending' && (
-                <div className="mt-4 flex gap-2">
-                  <button
-                    onClick={() => updateOrderStatus(order.id, 'confirmed')}
-                    className="flex items-center gap-1 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600"
-                  >
-                    <CheckCircle className="h-4 w-4" />
-                    Confirmer
-                  </button>
-                  <button
-                    onClick={() => updateOrderStatus(order.id, 'cancelled')}
-                    className="flex items-center gap-1 rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600"
-                  >
-                    <XCircle className="h-4 w-4" />
-                    Annuler
-                  </button>
-                  <button
-                    onClick={() => window.open(`https://wa.me/${order.customerPhone.replace(/[^\d]/g, '')}`, '_blank')}
-                    className="flex items-center gap-1 rounded-lg bg-[#1897aa] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d74b1]"
-                  >
-                    <MessageCircle className="h-4 w-4" />
-                    WhatsApp
-                  </button>
+              {order.items.length > 0 && (
+                <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate mb-2">Articles</p>
+                  <div className="flex gap-3 overflow-x-auto pb-1">
+                    {order.items.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="min-w-[170px] rounded-lg bg-white border border-gray-100 p-3 flex gap-3 shadow-sm"
+                      >
+                        {item.imageUrl ? (
+                          <div className="relative h-12 w-12 rounded-lg overflow-hidden bg-gray-100">
+                            <Image src={item.imageUrl} alt={item.toyName} fill className="object-cover" sizes="48px" />
+                          </div>
+                        ) : (
+                          <div className="h-12 w-12 rounded-lg bg-gray-100 flex items-center justify-center text-xs text-slate">
+                            -
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-charcoal line-clamp-1">{item.toyName}</p>
+                          <p className="text-xs text-slate">
+                            Quantité {item.quantity} · Stock {item.availableQuantity ?? item.stockQuantity ?? "?"}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
-              {order.status === 'confirmed' && (
-                <div className="mt-4 flex gap-2">
-                  <button
-                    onClick={() => updateOrderStatus(order.id, 'completed')}
-                    className="flex items-center gap-1 rounded-lg bg-[#1897aa] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d74b1]"
-                  >
-                    <CheckCircle className="h-4 w-4" />
-                    Marquer terminée
-                  </button>
-                  <button
-                    onClick={() => window.open(`https://wa.me/${order.customerPhone.replace(/[^\d]/g, '')}`, '_blank')}
-                    className="flex items-center gap-1 rounded-lg bg-[#1897aa] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d74b1]"
-                  >
-                    <MessageCircle className="h-4 w-4" />
-                    WhatsApp
-                  </button>
-                </div>
-              )}
+              <OrderActions
+                order={order}
+                updatingId={updatingId}
+                onUpdate={updateOrderStatus}
+                onConfirmAndDeliver={confirmAndSendToReturns}
+                onReset={resetOrder}
+              />
             </div>
           ))}
         </div>
 
-        {/* Empty State */}
         {filteredAndSortedOrders.length === 0 && (
           <div className="text-center py-12">
             <ShoppingCart className="mx-auto h-12 w-12 text-gray-400" />
@@ -397,19 +383,20 @@ export default function OrdersPage() {
             <p className="mt-2 text-gray-600">
               {searchQuery || filterStatus !== "all"
                 ? "Essayez de modifier vos filtres"
-                : "Les commandes apparaîtront ici une fois passées"
-              }
+                : "Les commandes apparaîtront ici une fois passées"}
             </p>
           </div>
         )}
       </div>
 
-      {/* Order Details Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <div className="w-full max-w-4xl rounded-xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-charcoal">Détails de la commande</h2>
+              <div>
+                <p className="text-xs uppercase font-semibold text-slate">Commande</p>
+                <h2 className="text-2xl font-bold text-charcoal">{selectedOrder.orderNumber || selectedOrder.id}</h2>
+              </div>
               <button
                 onClick={() => setSelectedOrder(null)}
                 className="rounded-lg bg-gray-100 p-2 text-gray-600 hover:bg-gray-200"
@@ -419,66 +406,51 @@ export default function OrdersPage() {
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">
-              {/* Client Info */}
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold text-charcoal">Informations client</h3>
                 <div className="rounded-lg bg-gray-50 p-4 space-y-3">
-                  <div className="flex items-center gap-3">
-                    <User className="h-5 w-5 text-gray-400" />
-                    <div>
-                      <p className="text-sm text-gray-600">Nom</p>
-                      <p className="font-medium text-charcoal">{selectedOrder.customerName}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Phone className="h-5 w-5 text-gray-400" />
-                    <div>
-                      <p className="text-sm text-gray-600">Téléphone</p>
-                      <p className="font-medium text-charcoal">{selectedOrder.customerPhone}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Calendar className="h-5 w-5 text-gray-400" />
-                    <div>
-                      <p className="text-sm text-gray-600">Date de commande</p>
-                      <p className="font-medium text-charcoal">{formatDate(selectedOrder.createdAt)}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="space-y-2">
-                  <button
-                    onClick={() => window.open(`https://wa.me/${selectedOrder.customerPhone.replace(/[^\d]/g, '')}`, '_blank')}
-                    className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#1897aa] px-4 py-3 text-white hover:bg-[#0d74b1]"
-                  >
-                    <MessageCircle className="h-4 w-4" />
-                    Contacter sur WhatsApp
-                  </button>
-                  <button
-                    onClick={() => window.open(`tel:${selectedOrder.customerPhone}`, '_self')}
-                    className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#0d74b1] px-4 py-3 text-white hover:bg-[#1897aa]"
-                  >
-                    <PhoneCall className="h-4 w-4" />
-                    Appeler
-                  </button>
+                  <InfoRow icon={<User className="h-5 w-5 text-gray-400" />} label="Nom" value={selectedOrder.customerName} />
+                  <InfoRow icon={<Phone className="h-5 w-5 text-gray-400" />} label="Téléphone" value={selectedOrder.customerPhone} />
+                  <InfoRow icon={<Calendar className="h-5 w-5 text-gray-400" />} label="Date de commande" value={formatDate(selectedOrder.createdAt)} />
+                  {selectedOrder.deliveryAddress && (
+                    <InfoRow icon={<Truck className="h-5 w-5 text-gray-400" />} label="Adresse" value={selectedOrder.deliveryAddress} />
+                  )}
+                  {selectedOrder.notes && (
+                    <InfoRow icon={<Package className="h-5 w-5 text-gray-400" />} label="Notes" value={selectedOrder.notes} />
+                  )}
                 </div>
               </div>
 
-              {/* Order Items */}
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold text-charcoal">Articles commandés</h3>
                 <div className="space-y-3">
-                  {selectedOrder.items.map((item, index) => (
-                    <div key={index} className="rounded-lg bg-gray-50 p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-medium text-charcoal">{item.toyName}</h4>
-                        <span className="font-semibold text-mint">{item.price} MAD</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
-                        <div>Quantité: {item.quantity}</div>
-                        <div>Durée: {item.duration}</div>
-                        <div>Date: {item.startDate}</div>
+                  {selectedOrder.items.map((item, idx) => (
+                    <div key={idx} className="rounded-lg bg-gray-50 p-4 flex gap-3">
+                      {item.imageUrl ? (
+                        <div className="relative h-16 w-16 rounded-lg overflow-hidden bg-white border border-gray-100">
+                          <Image src={item.imageUrl} alt={item.toyName} fill className="object-cover" sizes="64px" />
+                        </div>
+                      ) : (
+                        <div className="h-16 w-16 rounded-lg bg-white border border-gray-100 flex items-center justify-center text-xs text-slate">
+                          -
+                        </div>
+                      )}
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium text-charcoal">{item.toyName}</h4>
+                          <span className="font-semibold text-mint">{item.price} MAD</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
+                          <div>Quantité: {item.quantity}</div>
+                          <div>Durée: {item.duration}</div>
+                          <div>Date: {item.startDate}</div>
+                          <div>
+                            Stock dispo: <span className="font-semibold text-charcoal">{item.availableQuantity ?? item.stockQuantity ?? "N/A"}</span>
+                            {item.stockQuantity !== undefined && (
+                              <span className="ml-1 text-xs text-slate">/ {item.stockQuantity}</span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -493,56 +465,161 @@ export default function OrdersPage() {
               </div>
             </div>
 
-            {/* Status Actions */}
             <div className="mt-6 pt-6 border-t">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-gray-600">Statut actuel:</span>
-                  <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-medium border ${getStatusColor(selectedOrder.status)}`}>
-                    {getStatusIcon(selectedOrder.status)}
-                    {getStatusLabel(selectedOrder.status)}
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-medium border ${statusColors[selectedOrder.status]}`}
+                  >
+                    {statusIcon(selectedOrder.status)}
+                    {statusLabels[selectedOrder.status]}
                   </span>
                 </div>
-                <div className="flex gap-2">
-                  {selectedOrder.status === 'pending' && (
-                    <>
-                      <button
-                        onClick={() => {
-                          updateOrderStatus(selectedOrder.id, 'confirmed');
-                          setSelectedOrder({...selectedOrder, status: 'confirmed'});
-                        }}
-                        className="rounded-lg bg-[#1897aa] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d74b1]"
-                      >
-                        Confirmer
-                      </button>
-                      <button
-                        onClick={() => {
-                          updateOrderStatus(selectedOrder.id, 'cancelled');
-                          setSelectedOrder({...selectedOrder, status: 'cancelled'});
-                        }}
-                        className="rounded-lg bg-[#e72c37] px-4 py-2 text-sm font-medium text-white hover:bg-[#e72c37]/90"
-                      >
-                        Annuler
-                      </button>
-                    </>
-                  )}
-                  {selectedOrder.status === 'confirmed' && (
-                    <button
-                      onClick={() => {
-                        updateOrderStatus(selectedOrder.id, 'completed');
-                        setSelectedOrder({...selectedOrder, status: 'completed'});
-                      }}
-                      className="rounded-lg bg-[#1897aa] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d74b1]"
-                    >
-                      Marquer terminée
-                    </button>
-                  )}
-                </div>
+        <OrderActions
+          order={selectedOrder}
+          updatingId={updatingId}
+          onUpdate={updateOrderStatus}
+          onConfirmAndDeliver={confirmAndSendToReturns}
+          onReset={resetOrder}
+          compact
+        />
               </div>
             </div>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+type StatCardProps = { title: string; value: number; icon: ReactNode };
+function StatCard({ title, value, icon }: StatCardProps) {
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm flex items-center gap-3">
+      <div className="rounded-lg bg-mint/10 p-2 text-mint">{icon}</div>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate">{title}</p>
+        <p className="text-xl font-bold text-charcoal">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+type InfoRowProps = { icon: ReactNode; label: string; value?: string | number | null };
+function InfoRow({ icon, label, value }: InfoRowProps) {
+  return (
+    <div className="flex items-center gap-2">
+      {icon}
+      <div>
+        <p className="text-xs text-slate">{label}</p>
+        <p className="text-sm font-medium text-charcoal">{value ?? "-"}</p>
+      </div>
+    </div>
+  );
+}
+
+type OrderActionsProps = {
+  order: Order;
+  updatingId: string | null;
+  onUpdate: (id: string, status: StatusKey) => Promise<void>;
+  onConfirmAndDeliver?: (id: string) => Promise<void>;
+  onReset?: (id: string) => Promise<void>;
+  compact?: boolean;
+  disabled?: boolean;
+};
+function OrderActions({ order, updatingId, onUpdate, onReset, onConfirmAndDeliver, compact, disabled }: OrderActionsProps) {
+  const busy = updatingId === order.id;
+
+  const btnClass =
+    "flex items-center gap-1 rounded-lg px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60";
+
+  const resetButton = onReset ? (
+    <button
+      onClick={() => onReset(order.id)}
+      disabled={busy}
+      className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+    >
+      <RefreshCw className="h-4 w-4" />
+      Reset
+    </button>
+  ) : null;
+
+  const stackClass = `mt-4 flex gap-2 flex-wrap ${compact ? "" : ""}`;
+
+  if (order.status === "pending") {
+    return (
+      <div className={stackClass}>
+        <button
+          onClick={() => (onConfirmAndDeliver ? onConfirmAndDeliver(order.id) : onUpdate(order.id, "confirmed"))}
+          disabled={busy || disabled}
+          className={`${btnClass} bg-blue-500 hover:bg-blue-600`}
+        >
+          {busy ? <Spinner /> : <CheckCircle className="h-4 w-4" />}
+          {busy ? "En cours..." : "Confirmer"}
+        </button>
+        <button
+          onClick={() => onUpdate(order.id, "cancelled")}
+          disabled={busy || disabled}
+          className={`${btnClass} bg-red-500 hover:bg-red-600`}
+        >
+          {busy ? <Spinner /> : <XCircle className="h-4 w-4" />}
+          {busy ? "En cours..." : "Annuler"}
+        </button>
+        {resetButton}
+      </div>
+    );
+  }
+
+  if (order.status === "delivered") {
+    return (
+      <div className={stackClass}>
+        <button
+          onClick={() => onUpdate(order.id, "returned")}
+          disabled={busy || disabled}
+          className={`${btnClass} bg-emerald-600 hover:bg-emerald-700`}
+        >
+          {busy ? <Spinner /> : <Shield className="h-4 w-4" />}
+          {busy ? "En cours..." : "Marquer restituée"}
+        </button>
+        {resetButton}
+      </div>
+    );
+  }
+
+  if (order.status === "returned") {
+    return (
+      <div className={stackClass}>
+        <button
+          onClick={() => onUpdate(order.id, "completed")}
+          disabled={busy || disabled}
+          className={`${btnClass} bg-mint hover:bg-mint/90`}
+        >
+          {busy ? <Spinner /> : <CheckCircle className="h-4 w-4" />}
+          {busy ? "En cours..." : "Clôturer"}
+        </button>
+        {resetButton}
+      </div>
+    );
+  }
+
+  return resetButton ? <div className={stackClass}>{resetButton}</div> : null;
+}
+
+function Spinner() {
+  return <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />;
+}
+
+type ActionButtonProps = { onClick: () => void; icon: ReactNode; label: string; tone?: "primary" | "secondary" };
+function ActionButton({ onClick, icon, label, tone = "primary" }: ActionButtonProps) {
+  const base = tone === "primary" ? "bg-[#1897aa] hover:bg-[#0d74b1]" : "bg-[#0d74b1] hover:bg-[#1897aa]";
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-white ${base}`}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }

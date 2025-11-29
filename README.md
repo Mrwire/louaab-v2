@@ -101,6 +101,17 @@ NEXT_PUBLIC_API_URL=http://localhost:3000/api
 ```
 
 4. **Initialiser la base de données**
+
+**Option A – via Docker (recommandé pour le dev)**
+```bash
+# Lancer Postgres en arrière-plan
+docker compose up -d postgres
+
+# Vérifier que le service est prêt
+docker compose logs -f postgres
+```
+
+**Option B – instance locale déjà installée**
 ```bash
 # Se connecter à PostgreSQL
 psql -U postgres

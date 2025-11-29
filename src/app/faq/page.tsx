@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { PageShell } from "@/components/page-shell";
@@ -8,144 +8,155 @@ import Link from "next/link";
 
 const faqCategories = [
   {
-    title: "À propos de LOUAAB",
-    icon: "🎈",
+    title: "🧸 Qu’est-ce que LOUAAB ?",
+    icon: "🧸",
     questions: [
       {
-        question: "Qu'est-ce qu'une entreprise de location de jouets ?",
-        answer:
-          "LOUAAB est le premier service marocain de location de jouets et jeux de société. Nous proposons des centaines de jouets adaptés aux enfants, adolescents et adultes. Vous choisissez, on livre, vous jouez, et quand vous en avez assez, on vient échanger ! C'est simple, économique et écologique.",
+        question: "🧸 Qu’est-ce que LOUAAB ?",
+        answer: `LOUAAB est le premier service marocain de location de jouets pour enfants, à la fois simple, flexible et éco-responsable.
+Nous permettons aux parents d’offrir à leurs enfants de nouveaux jeux chaque mois, sans encombrer la maison ni gaspiller.`,
       },
       {
-        question: "Pourquoi louer plutôt qu'acheter ?",
-        answer:
-          "Louer coûte beaucoup moins cher que d'acheter constamment de nouveaux jouets. De plus, les enfants se lassent vite : avec LOUAAB, ils découvrent toujours de nouveaux jeux sans encombrer la maison. C'est aussi un geste pour la planète en participant à l'économie circulaire.",
+        question: "💡 Pourquoi louer plutôt qu’acheter ?",
+        answer: `Parce que les enfants se lassent vite de leurs jouets !
+Avec Louaab, vous pouvez renouveler régulièrement leur univers de jeu, économiser de l’argent et adopter un geste plus durable.
+Et si un jouet devient leur préféré… vous pouvez même le garder pour toujours ❤`,
       },
     ],
   },
   {
-    title: "Fonctionnement",
+    title: "⚙ Fonctionnement",
     icon: "⚙️",
     questions: [
       {
-        question: "Comment fonctionne la location ?",
-        answer:
-          "C'est très simple ! Vous choisissez un pack mensuel (Mini, Maxi ou Mega) adapté à vos besoins. Nous livrons les jouets chez vous gratuitement (à Casa et Rabat à partir de 300 MAD). Vous gardez les jouets aussi longtemps que vous voulez, puis demandez un échange quand vos enfants veulent de la nouveauté.",
+        question: "🎯 Comment fonctionne la location ?",
+        answer: `Choisissez vos jouets sur le site, ajoutez-les à votre panier, et recevez-les directement à la maison.
+Chaque jouet est soigneusement nettoyé, désinfecté et livré prêt à jouer !`,
       },
       {
-        question: "Y a-t-il un engagement minimum ?",
-        answer:
-          "Non ! LOUAAB fonctionne sans engagement. Vous pouvez mettre en pause ou annuler votre abonnement à tout moment. Notre objectif est votre satisfaction, pas de vous enfermer dans un contrat.",
+        question: "📅 Y a-t-il un engagement minimum ?",
+        answer: `Aucun ! Louaab fonctionne sans abonnement fixe ni durée imposée.
+Vous gardez les jouets aussi longtemps que vous le souhaitez et pouvez mettre votre location en pause à tout moment.`,
       },
       {
-        question: "À quelle fréquence puis-je échanger mes jouets ?",
-        answer:
-          "Vous pouvez échanger vos jouets autant de fois que vous le souhaitez ! Il n'y a pas de limite mensuelle. Dès que vos enfants s'en lassent, demandez un échange via le site ou WhatsApp.",
+        question: "🔁 À quelle fréquence puis-je échanger mes jouets ?",
+        answer: `Autant de fois que vous le souhaitez !
+Les échanges se font facilement via WhatsApp ou directement sur le site, avec livraison et reprise gratuites à Casablanca et Rabat à partir de 300 Dhs.`,
+      },
+      {
+        question: "🧾 Que se passe-t-il si un jouet est abîmé ?",
+        answer: `Pas de panique 😊 Les petites traces d’usure sont normales.
+En cas de casse importante, notre équipe vous contactera pour évaluer une éventuelle participation au remplacement, au cas par cas.`,
       },
     ],
   },
   {
-    title: "Jouets & Catalogue",
+    title: "🎁 Jouets & Catalogue",
     icon: "🎁",
     questions: [
       {
-        question: "Quels types de jouets proposez-vous ?",
-        answer:
-          "Notre catalogue comprend plus de 500 jouets : jeux Montessori, jeux éducatifs, jouets en bois, jeux de société pour toute la famille, puzzles, jeux de construction, véhicules, jouets d'extérieur, et bien plus. Nous ajoutons régulièrement de nouveaux jouets.",
+        question: "👶 Quels types de jouets proposez-vous ?",
+        answer: `Nous proposons des jouets éducatifs, d’éveil, de motricité, de construction, des jeux de société, et même des jeux pour les plus grands.
+Chaque jouet est sélectionné pour sa qualité, sa sécurité et son intérêt pédagogique.`,
       },
       {
-        question: "Les jouets conviennent à quel âge ?",
-        answer:
-          "Nos jouets sont adaptés de 0 à 8 ans principalement, mais nous avons également des jeux de société pour adolescents et adultes. Chaque jouet est étiqueté avec l'âge recommandé pour vous aider à choisir.",
+        question: "🌈 Les jouets conviennent à quel âge ?",
+        answer: "Le catalogue couvre une large tranche d’âge, de 6 mois à « 10 ans, »\navec des filtres pratiques pour trouver le jouet parfait selon l’âge et les intérêts de votre enfant.",
       },
       {
-        question: "Les photos sont-elles des images réelles des jouets ?",
+        question: "📸 Les photos sont-elles des images réelles des jouets ?",
         answer:
-          "Oui ! Nous prenons en photo tous nos jouets pour que vous voyiez exactement ce que vous allez recevoir. Nous indiquons aussi l'état (excellent, très bon, bon) pour une transparence totale.",
+          "Oui ! Toutes les photos du site représentent les jouets réels disponibles à la location, pour que vous sachiez exactement ce que vous recevrez.",
       },
       {
-        question: "Puis-je louer des jouets pour une fête d'anniversaire ou un événement ?",
+        question: "Puis-je louer des jouets pour une fête d’anniversaire ou un événement ?",
+        answer: `Bien sûr ! Nous proposons des packs spéciaux pour les anniversaires, les écoles et les événements.
+Contactez-nous sur WhatsApp pour créer un pack personnalisé selon l’âge et le nombre d’enfants.`,
+      },
+      {
+        question: "✨ Les jouets sont-ils bien nettoyés ?",
         answer:
-          "Absolument ! Contactez-nous sur WhatsApp ou par email, nous pouvons créer un pack personnalisé pour votre événement avec livraison et collecte aux dates de votre choix.",
+          "Absolument. Chaque jouet est désinfecté en profondeur après chaque location, selon un protocole strict et des produits adaptés aux enfants.",
       },
     ],
   },
   {
-    title: "Sécurité & Hygiène",
-    icon: "✨",
+    title: "🧼 Sécurité & Hygiène",
+    icon: "🧼",
     questions: [
       {
         question: "Les jouets sont-ils propres et sûrs ?",
-        answer:
-          "Oui, absolument ! Chaque jouet est soigneusement nettoyé avec des produits non toxiques, désinfecté, inspecté et réparé si nécessaire avant chaque location. Tous nos jouets sont conformes aux normes CE européennes.",
+        answer: `Absolument ! La sécurité et l’hygiène sont au cœur de notre engagement.
+Tous nos jouets sont vérifiés, nettoyés et désinfectés après chaque location, avec des produits adaptés aux enfants et respectueux de l’environnement.`,
       },
       {
         question: "Comment nettoyez-vous les jouets ?",
         answer:
-          "Nous utilisons un protocole strict : nettoyage avec des produits non toxiques, désinfection, vérification de toutes les pièces, réparation si nécessaire, puis emballage individuel. Chaque jouet est traité comme si c'était pour nos propres enfants.",
+          "Chaque jouet passe par un protocole rigoureux en plusieurs étapes :\n\t1.\tVérification de l’état général\n\t2.\tLavage à la main ou vapeur selon le matériau\n\t3.\tDésinfection complète avec produits certifiés non toxiques\n\t4.\tSéchage et contrôle final avant emballage",
       },
     ],
   },
   {
-    title: "Tarifs & Paiement",
+    title: "💰 Tarifs & Paiement",
     icon: "💰",
     questions: [
       {
         question: "Est-ce vraiment économique ?",
-        answer:
-          "Oui ! Par exemple, le Maxi Pack coûte 349 MAD/mois pour 5 jouets, soit 70 MAD par jouet. Si vous achetiez ces mêmes jouets, vous dépenseriez facilement plus de 2000 MAD, et ils finiraient par prendre la poussière. Avec LOUAAB, vous économisez et vos enfants ne s'ennuient jamais.",
+        answer: `Oui ! Louer avec Louaab, c’est offrir à votre enfant une rotation constante de jouets pour une fraction du prix d’achat.
+Vous économisez tout en offrant plus de variété et en limitant le gaspillage.`,
       },
       {
-        question: "Y a-t-il des frais d'adhésion ou d'inscription ?",
-        answer:
-          "Non, aucun frais d'adhésion. Vous payez simplement votre pack mensuel et une caution remboursable (qui vous est rendue en fin d'abonnement si les jouets sont en bon état).",
+        question: "Y a-t-il des frais d’adhésion ou d’inscription ?",
+        answer: "Non, aucun frais caché. Vous payez uniquement la location des jouets que vous choisissez.",
       },
       {
-        question: "Qu'est-ce que la caution et pourquoi est-elle nécessaire ?",
-        answer:
-          "La caution est un montant remboursable qui couvre d'éventuels dommages ou pertes. Elle est de 100 à 250 MAD selon votre pack. Si vous retournez les jouets en bon état, la caution vous est intégralement remboursée. C'est une garantie pour nous et pour vous.",
+        question: "Qu’est-ce que la caution et pourquoi est-elle nécessaire ?",
+        answer: `Une petite caution peut être demandée selon la valeur du jouet.
+Elle est bien sûr remboursée intégralement au retour du jouet en bon état.
+Cela nous permet de maintenir la qualité du service et des jouets proposés.`,
       },
       {
         question: "Proposez-vous des promotions ou des réductions ?",
-        answer:
-          "Oui ! Nous avons régulièrement des offres spéciales, notamment pour les nouveaux membres, les parrainages, et certaines périodes de l'année. Abonnez-vous à notre newsletter pour ne rien manquer.",
+        answer: `Oui ! Nous proposons régulièrement des offres spéciales, remises saisonnières et packs avantageux.
+Suivez-nous sur Instagram ou abonnez-vous à notre newsletter pour ne rien manquer 🎉`,
       },
     ],
   },
   {
-    title: "Livraison & Retour",
+    title: "🚚 Livraison & Retour",
     icon: "🚚",
     questions: [
       {
         question: "Comment se passe la livraison et la collecte ?",
-        answer:
-          "Nous livrons gratuitement à Casablanca et Rabat (à partir de 300 MAD de commande). Vous choisissez un créneau horaire qui vous arrange. Lors d'un échange, nous récupérons les anciens jouets et livrons les nouveaux en même temps.",
+        answer: `Nous livrons et récupérons vos jouets directement à domicile.
+La livraison et le retour sont gratuits à partir de 300 Dhs à Casablanca et Rabat.
+Vous choisissez le créneau horaire qui vous convient, et notre équipe s’occupe du reste.`,
       },
       {
         question: "Que se passe-t-il si un jouet est endommagé ?",
-        answer:
-          "Pas de panique ! L'usure normale est tout à fait acceptable. Si un jouet est cassé accidentellement, contactez-nous. Selon les dégâts, soit on le répare, soit on déduira une petite participation de votre caution. Nous restons toujours raisonnables et compréhensifs.",
+        answer: `Pas d’inquiétude 😊
+Les petites marques d’usure sont normales. Si un jouet est sérieusement abîmé, nous vous contactons pour évaluer ensemble une solution juste et simple.`,
       },
       {
         question: "Et si mon enfant ne veut pas rendre un jouet ?",
-        answer:
-          "Ça arrive ! Si votre enfant adore un jouet et ne veut plus s'en séparer, vous pouvez l'acheter à un prix avantageux. Contactez-nous pour connaître le prix de rachat.",
+        answer: `C’est souvent le signe qu’il l’adore ❤
+Bonne nouvelle : vous pouvez racheter le jouet à prix préférentiel et le garder définitivement.`,
       },
     ],
   },
   {
-    title: "Commande & Contact",
+    title: "📱 Commande & Contact",
     icon: "📱",
     questions: [
       {
         question: "Puis-je louer directement via le site web ?",
         answer:
-          "Oui ! Parcourez notre catalogue en ligne, ajoutez les jouets à votre panier, et finalisez votre commande. Vous pouvez aussi nous contacter sur WhatsApp si vous préférez un accompagnement personnalisé.",
+          "Oui, tout se passe en ligne ! Vous pouvez choisir vos jouets, les ajouter au panier et planifier la livraison en quelques clics.",
       },
       {
         question: "Puis-je vous contacter sur WhatsApp ?",
-        answer:
-          "Bien sûr ! WhatsApp est notre canal de communication principal. Envoyez-nous un message au +212 6 65701513, nous vous répondons rapidement pour vous aider à choisir, commander ou échanger vos jouets.",
+        answer: `Bien sûr ! C’est le moyen le plus simple et le plus rapide pour poser une question ou demander un échange.
+👉 Cliquez sur le bouton WhatsApp en bas de la page, notre équipe vous répond rapidement.`,
       },
     ],
   },
@@ -280,7 +291,7 @@ export default function FAQPage() {
                             transition={{ duration: 0.3 }}
                             className="border-t border-mist px-6 pb-6"
                           >
-                            <p className="pt-4 text-slate leading-relaxed">
+                            <p className="pt-4 text-slate leading-relaxed whitespace-pre-line">
                               {item.answer}
                             </p>
                           </motion.div>
@@ -333,3 +344,4 @@ export default function FAQPage() {
     </PageShell>
   );
 }
+

@@ -173,6 +173,31 @@ let ToyService = class ToyService {
             where: { status: toy_entity_1.ToyStatus.AVAILABLE, isActive: true },
         });
     }
+    // Mettre à jour la caution de tous les jouets selon un pourcentage d'un prix de base
+    async updateDepositForAll(percentage, base = 'daily') {
+        const toys = await this.toyRepository.find();
+        let updated = 0;
+        for (const toy of toys) {
+            const daily = Number(toy.rentalPriceDaily || 0);
+            const weekly = Number(toy.rentalPriceWeekly || 0);
+            const monthly = Number(toy.rentalPriceMonthly || 0);
+            let basePrice = 0;
+            if (base === 'daily')
+                basePrice = daily;
+            else if (base === 'weekly')
+                basePrice = weekly;
+            else
+                basePrice = monthly;
+            // Si pas de prix base, sauter
+            if (!basePrice || isNaN(basePrice))
+                continue;
+            const newDeposit = Number(((basePrice * percentage) / 100).toFixed(2));
+            toy.depositAmount = newDeposit;
+            await this.toyRepository.save(toy);
+            updated++;
+        }
+        return updated;
+    }
 };
 exports.ToyService = ToyService;
 exports.ToyService = ToyService = __decorate([

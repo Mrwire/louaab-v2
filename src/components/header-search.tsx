@@ -116,7 +116,7 @@ export default function HeaderSearch() {
             </div>
             {searchResults.map((toy) => (
               <Link
-                key={toy.id}
+                key={toy.backendId ?? toy.id}
                 href={`/jouets/${toy.slug}`}
                 className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-mint/10 transition group"
                 onClick={() => {

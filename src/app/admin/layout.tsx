@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { AuthManager } from "@/lib/auth";
 import {
@@ -14,22 +15,41 @@ import {
   X,
   Bell,
   LogOut,
-  Search,
   Edit,
   Calendar,
   Power,
   Baby,
   Tags,
+  RefreshCw,
+  Truck,
+  Mail,
 } from "lucide-react";
 import AdminDropdown from "@/components/admin-dropdown";
 import { NotificationContainer } from "@/components/notification-toast";
+import { fetchAdminOrders } from "@/lib/api/admin-orders";
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "https://louaab.ma/api";
+
+type QuickNotification = {
+  id: string;
+  title: string;
+  message: string;
+  time: string;
+  type: "order" | "contact";
+};
+
+const pingSound =
+  "data:audio/wav;base64,UklGRuQAAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YcQAAACAgICAf3+/v7+/v79/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+/f39/f3+/v7+/v7+";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/admin" },
   { icon: Package, label: "Inventaire", href: "/admin/inventory" },
   { icon: ShoppingCart, label: "Commandes", href: "/admin/orders" },
+  { icon: Truck, label: "Restitutions", href: "/admin/returns" },
+  { icon: Mail, label: "Messages contact", href: "/admin/contact-messages" },
   { icon: Power, label: "Maintenance", href: "/admin/maintenance" },
-  { icon: Settings, label: "Paramètres", href: "/admin/settings" },
+  { icon: Settings, label: "Param?tres", href: "/admin/settings" },
 ];
 
 const packSubItems = [
@@ -70,11 +90,157 @@ export default function AdminLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
+  const [notifications, setNotifications] = useState<QuickNotification[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  const [newOrderAlert, setNewOrderAlert] = useState<{ count: number; name: string }>({ count: 0, name: "" });
+  const lastOrderTimestampRef = useRef<number | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const pathname = usePathname();
   const router = useRouter();
 
   const isPacksSectionActive = pathname === "/admin/packs" || pathname === "/admin/pack-reservations";
   const isContentSectionActive = pathname === "/admin/ages" || pathname === "/admin/categories";
+
+  const formatNotificationTime = useCallback((value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+    return date.toLocaleString("fr-MA", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }, []);
+
+  const playNewOrderSound = () => {
+    try {
+      if (!audioRef.current) {
+        audioRef.current = new Audio(pingSound);
+      }
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(() => {});
+    } catch (error) {
+      console.warn("Impossible de jouer le son:", error);
+    }
+  };
+
+  const showBrowserNotification = (title: string, body: string) => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission === "granted") {
+      new Notification(title, { body });
+    } else if (Notification.permission !== "denied") {
+      Notification.requestPermission().then((permission) => {
+        if (permission === "granted") {
+          new Notification(title, { body });
+        }
+      });
+    }
+  };
+
+  const checkNewOrders = useCallback(async () => {
+    try {
+      const orders = await fetchAdminOrders().catch(() => []);
+      if (!Array.isArray(orders) || orders.length === 0) return;
+      const newest = orders.reduce((max, o) => {
+        const ts = new Date(o.createdAt || o.updatedAt || Date.now()).getTime();
+        return Math.max(max, ts);
+      }, 0);
+
+      if (!newest) return;
+      if (lastOrderTimestampRef.current === null) {
+        lastOrderTimestampRef.current = newest;
+        return;
+      }
+
+      if (newest > lastOrderTimestampRef.current) {
+        const newOnes = orders.filter((o) => {
+          const ts = new Date(o.createdAt || o.updatedAt || Date.now()).getTime();
+          return ts > (lastOrderTimestampRef.current as number);
+        });
+        const count = newOnes.length || 1;
+        const latestName = newOnes[0]?.customerName || "Nouvelle commande";
+        lastOrderTimestampRef.current = newest;
+        setNewOrderAlert({ count, name: latestName });
+        playNewOrderSound();
+        showBrowserNotification("Nouvelle commande", `${count} nouvelle(s) commande(s) - ${latestName}`);
+        setTimeout(() => setNewOrderAlert({ count: 0, name: "" }), 8000);
+      }
+    } catch (error) {
+      console.warn("Polling commandes échoué:", error);
+    }
+  }, []);
+
+  const loadNotifications = useCallback(async () => {
+    try {
+      setNotificationsLoading(true);
+      setNotificationsError(null);
+
+      const [ordersData, contactsRes] = await Promise.all([
+        fetchAdminOrders().catch(() => []),
+        fetch(`${API_BASE_URL}/contact`, { credentials: "include" }),
+      ]);
+
+      const nextNotifications: QuickNotification[] = [];
+
+      if (Array.isArray(ordersData)) {
+        ordersData.slice(0, 3).forEach((order: any) => {
+          nextNotifications.push({
+            id: order?.id || order?.orderNumber || `order-${Math.random().toString(36).slice(2)}`,
+            title: `Commande ${order?.customerName || "client"}`,
+            message: `Statut : ${(order?.status || "pending").toString()} • ${order?.items?.length || 0} article(s)`,
+            time: order?.createdAt || new Date().toISOString(),
+            type: "order",
+          });
+        });
+      }
+
+      if (contactsRes.ok) {
+        const contactsPayload = await contactsRes.json().catch(() => ({}));
+        const contactItems = Array.isArray(contactsPayload?.data) ? contactsPayload.data.slice(0, 3) : [];
+        contactItems.forEach((message: any) => {
+          nextNotifications.push({
+            id: message?.id || `contact-${Math.random().toString(36).slice(2)}`,
+            title: `Message de ${message?.name || "visiteur"}`,
+            message: (message?.message || "").slice(0, 80) + ((message?.message || "").length > 80 ? "…" : ""),
+            time: message?.createdAt || new Date().toISOString(),
+            type: "contact",
+          });
+        });
+      }
+
+      nextNotifications.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+      setNotifications(nextNotifications.slice(0, 6));
+    } catch (error) {
+      console.error("Erreur lors du chargement des notifications:", error);
+      setNotificationsError("Impossible de charger les notifications");
+    } finally {
+      setNotificationsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadNotifications();
+  }, [loadNotifications]);
+
+  useEffect(() => {
+    // Poll commandes pour détecter de nouvelles entrées
+    if (!isAuthenticated || pathname === "/admin/login") return;
+
+    checkNewOrders();
+    pollIntervalRef.current = setInterval(checkNewOrders, 20000);
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, [isAuthenticated, pathname, checkNewOrders]);
 
   useEffect(() => {
     // Vérifier l'authentification
@@ -92,9 +258,34 @@ export default function AdminLayout({
     checkAuth();
   }, [pathname, router]);
 
+  useEffect(() => {
+    if (!showNotificationsPanel) return;
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (
+        !target.closest?.("#admin-notifications-panel") &&
+        !target.closest?.("#admin-notifications-button")
+      ) {
+        setShowNotificationsPanel(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showNotificationsPanel]);
+
   const handleLogout = () => {
     AuthManager.logout();
     router.push('/admin/login');
+  };
+
+  const handleNotificationsToggle = () => {
+    setShowNotificationsPanel((prev) => {
+      const next = !prev;
+      if (!prev) {
+        loadNotifications();
+      }
+      return next;
+    });
   };
 
   // Afficher le loader pendant la vérification
@@ -131,10 +322,15 @@ export default function AdminLayout({
           {/* Logo */}
           <div className="flex h-16 items-center justify-between border-b border-mist px-6">
             <Link href="/admin" className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-mint to-fresh-green">
-                <Package size={20} className="text-white" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm">
+                <Image
+                  src="https://louaab.ma/logo.png"
+                  alt="Logo LOUAAB"
+                  width={40}
+                  height={40}
+                  className="h-10 w-10 object-contain"
+                />
               </div>
-              <span className="text-lg font-bold text-charcoal">LOUAAB</span>
             </Link>
             <button
               onClick={() => setSidebarOpen(false)}
@@ -226,31 +422,97 @@ export default function AdminLayout({
             >
               <Menu size={24} />
             </button>
-
-            {/* Search Bar */}
-            <div className="relative hidden md:block">
-              <Search
-                size={18}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate"
-              />
-              <input
-                type="text"
-                placeholder="Rechercher..."
-                className="w-64 rounded-xl border border-mist bg-mist/20 py-2 pl-10 pr-4 text-sm focus:border-mint focus:outline-none focus:ring-2 focus:ring-mint/20"
-              />
-            </div>
           </div>
 
           <div className="flex items-center gap-4">
+            {newOrderAlert.count > 0 && (
+              <div className="hidden lg:flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 border border-emerald-200 shadow-sm">
+                <span className="text-xs font-semibold">Nouvelle commande</span>
+                <span className="text-sm font-bold">
+                  {newOrderAlert.count} × {newOrderAlert.name}
+                </span>
+              </div>
+            )}
             {/* Notifications */}
-            <button className="relative rounded-xl border border-mist p-2 transition hover:border-mint hover:bg-mint/10">
-              <Bell size={20} />
-              <span className="absolute right-1 top-1 flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-coral opacity-75"></span>
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-coral"></span>
-              </span>
-            </button>
+            <div className="relative">
+              <button
+                id="admin-notifications-button"
+                onClick={handleNotificationsToggle}
+                className="relative rounded-xl border border-mist p-2 transition hover:border-mint hover:bg-mint/10"
+              >
+                <Bell size={20} />
+                {notifications.length > 0 && (
+                  <span className="absolute right-1 top-1 flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-coral opacity-75"></span>
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-coral"></span>
+                  </span>
+                )}
+              </button>
 
+              {showNotificationsPanel && (
+                <div
+                  id="admin-notifications-panel"
+                  className="absolute right-0 top-12 w-80 rounded-2xl border border-gray-100 bg-white shadow-2xl p-4 z-50"
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-charcoal">Notifications</p>
+                      <p className="text-xs text-slate">Dernières activités</p>
+                    </div>
+                    <button
+                      onClick={loadNotifications}
+                      className="rounded-full border border-gray-200 p-1 text-slate hover:text-charcoal hover:border-mint transition"
+                      title="Rafraîchir"
+                    >
+                      <RefreshCw size={14} />
+                    </button>
+                  </div>
+                  {notificationsLoading && (
+                    <p className="text-xs text-slate py-4 text-center">Chargement...</p>
+                  )}
+                  {!notificationsLoading && notificationsError && (
+                    <p className="text-xs text-coral py-4 text-center">{notificationsError}</p>
+                  )}
+                  {!notificationsLoading && !notificationsError && notifications.length === 0 && (
+                    <p className="text-xs text-slate py-4 text-center">
+                      Aucune notification récente.
+                    </p>
+                  )}
+                  {!notificationsLoading && !notificationsError && notifications.length > 0 && (
+                    <div className="space-y-3 max-h-80 overflow-y-auto">
+                      {notifications.map((notification) => (
+                        <button
+                          key={notification.id}
+                          type="button"
+                          onClick={() => {
+                            setShowNotificationsPanel(false);
+                            const target =
+                              notification.type === "order"
+                                ? `/admin/orders?highlight=${encodeURIComponent(notification.id)}`
+                                : "/admin/contact-messages";
+                            router.push(target);
+                          }}
+                          className="rounded-xl border border-gray-100 p-3 bg-mist/10 text-left hover:border-mint transition"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-charcoal">
+                              {notification.title}
+                            </span>
+                            <span className="text-[11px] text-gray-500">
+                              {formatNotificationTime(notification.time)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate mt-1">{notification.message}</p>
+                          <span className="mt-2 inline-flex rounded-full bg-mint/10 px-2 py-0.5 text-[11px] font-medium text-mint">
+                            {notification.type === "order" ? "Commande" : "Contact"}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </header>
 

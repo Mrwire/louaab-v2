@@ -144,19 +144,6 @@ export default async function ToyDetailPage({ params }: { params: Promise<{ slug
               </p>
             )}
 
-            {/* Price */}
-            <div className="rounded-2xl bg-gradient-to-br from-mint/10 to-blue-50 p-6">
-              <div className="text-sm font-semibold uppercase tracking-wide text-slate">
-                Prix de location
-              </div>
-              <div className="mt-2 text-4xl font-bold text-mint">
-                {toy.price || 'Sur demande'}
-              </div>
-              <p className="mt-2 text-sm text-slate">
-                Par période de location
-              </p>
-            </div>
-
             {/* Details Grid */}
             <div className="grid gap-4 sm:grid-cols-2">
               {/* Age */}
@@ -227,7 +214,7 @@ export default async function ToyDetailPage({ params }: { params: Promise<{ slug
           
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {relatedToys.map((relatedToy) => (
-              <ToyCardWithReservation key={relatedToy.id} toy={relatedToy} />
+              <ToyCardWithReservation key={relatedToy.backendId ?? relatedToy.id} toy={relatedToy} />
             ))}
           </div>
         </section>

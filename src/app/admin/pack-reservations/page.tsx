@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { usePackReservations, PackReservation } from "@/contexts/pack-reservations";
 import { 
   Package, 
@@ -13,7 +13,6 @@ import {
   User,
   Mail,
   Search,
-  Filter,
   MessageCircle,
   PhoneCall
 } from "lucide-react";
@@ -272,22 +271,18 @@ export default function PackReservationsPage() {
                 <div className="flex items-center gap-2">
                   <User className="h-4 w-4 text-gray-400" />
                   <div>
-                    <p className="text-xs text-slate">Client</p>
-                    <p className="text-sm font-medium text-charcoal">{reservation.customerName}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-gray-400" />
-                  <div>
-                    <p className="text-xs text-slate">Téléphone</p>
-                    <p className="text-sm font-medium text-charcoal">{reservation.customerPhone}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-gray-400" />
-                  <div>
                     <p className="text-xs text-slate">Période</p>
-                    <p className="text-sm font-medium text-charcoal">{reservation.startDate} - {reservation.endDate}</p>
+                    <p className="text-sm font-medium text-charcoal">
+                      {reservation.startDate
+                        ? formatDate(reservation.startDate)
+                        : "Date à confirmer"}
+                      {reservation.endDate && (
+                        <>
+                          <span className="mx-1 text-slate">→</span>
+                          {formatDate(reservation.endDate)}
+                        </>
+                      )}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -388,70 +383,28 @@ export default function PackReservationsPage() {
                       <p className="font-medium text-charcoal">{selectedReservation.customerName}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Phone className="h-5 w-5 text-gray-400" />
-                    <div>
-                      <p className="text-sm text-gray-600">Téléphone</p>
-                      <p className="font-medium text-charcoal">{selectedReservation.customerPhone}</p>
-                    </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Téléphone</p>
+                    <p className="font-medium text-charcoal">{selectedReservation.customerPhone}</p>
                   </div>
                   {selectedReservation.customerEmail && (
-                    <div className="flex items-center gap-3">
-                      <Mail className="h-5 w-5 text-gray-400" />
-                      <div>
-                        <p className="text-sm text-gray-600">Email</p>
-                        <p className="font-medium text-charcoal">{selectedReservation.customerEmail}</p>
-                      </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Email</p>
+                      <p className="font-medium text-charcoal">{selectedReservation.customerEmail}</p>
                     </div>
                   )}
-                  <div className="flex items-center gap-3">
-                    <Calendar className="h-5 w-5 text-gray-400" />
-                    <div>
-                      <p className="text-sm text-gray-600">Date de réservation</p>
-                      <p className="font-medium text-charcoal">{formatDate(selectedReservation.createdAt)}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="space-y-2">
-                  <button
-                    onClick={() => window.open(`https://wa.me/${selectedReservation.customerPhone.replace(/[^\d]/g, '')}`, '_blank')}
-                    className="w-full flex items-center justify-center gap-2 rounded-lg bg-green-500 px-4 py-3 text-white hover:bg-green-600"
-                  >
-                    <MessageCircle className="h-4 w-4" />
-                    Contacter sur WhatsApp
-                  </button>
-                  <button
-                    onClick={() => window.open(`tel:${selectedReservation.customerPhone}`, '_self')}
-                    className="w-full flex items-center justify-center gap-2 rounded-lg bg-blue-500 px-4 py-3 text-white hover:bg-blue-600"
-                  >
-                    <PhoneCall className="h-4 w-4" />
-                    Appeler
-                  </button>
-                </div>
-              </div>
-
-              {/* Pack Info */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-charcoal">Détails du pack</h3>
-                <div className="rounded-lg bg-gray-50 p-4 space-y-3">
-                  <div>
-                    <p className="text-sm text-gray-600">Pack</p>
-                    <p className="font-medium text-charcoal">{selectedReservation.packName}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Prix</p>
-                    <p className="font-medium text-charcoal">{selectedReservation.packPrice}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Description</p>
-                    <p className="font-medium text-charcoal">{selectedReservation.packDescription}</p>
-                  </div>
                   <div>
                     <p className="text-sm text-gray-600">Période</p>
                     <p className="font-medium text-charcoal">
-                      {selectedReservation.startDate} - {selectedReservation.endDate}
+                      {selectedReservation.startDate
+                        ? formatDate(selectedReservation.startDate)
+                        : "Date à confirmer"}
+                      {selectedReservation.endDate && (
+                        <>
+                          <span className="mx-1 text-slate">→</span>
+                          {formatDate(selectedReservation.endDate)}
+                        </>
+                      )}
                     </p>
                   </div>
                   <div>
@@ -521,3 +474,6 @@ export default function PackReservationsPage() {
     </div>
   );
 }
+
+
+

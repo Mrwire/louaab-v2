@@ -38,8 +38,8 @@ export function ProductCard({
         onClick={(e) => { e.stopPropagation(); toggleFavorite(keyId); }}
         className={`flex h-11 w-11 items-center justify-center rounded-full shadow-sm transition-all duration-300 ${
           isFav 
-            ? 'bg-[#fcba2d] text-white scale-110' 
-            : 'bg-white text-charcoal hover:bg-[#fcba2d] hover:text-white'
+            ? 'bg-red-500 text-white scale-110' 
+            : 'bg-white text-charcoal hover:bg-red-500 hover:text-white'
         }`}
         aria-label={isFav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
       >

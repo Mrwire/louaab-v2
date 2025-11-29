@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
+import { API_BASE_URL } from "@/lib/api/config";
 import {
   Package,
   Plus,
@@ -18,13 +19,13 @@ import {
   RefreshCw,
 } from "lucide-react";
 
-// Liste d'icônes prédéfinies (emojis populaires pour les catégories)
+// Liste 'cônes prédéfinies (emojis populaires pour les catégories)
 const PREDEFINED_EMOJIS = [
   '🧩', '🎨', '🚗', '🏀', '🎮', '🎵', '📚', '🧸', '🎭', '⚽',
   '🎪', '🎸', '🎹', '🎯', '🦁', '🐻', '🐰', '🌟', '⭐', '💫'
 ];
 
-// Liste d'icônes Lucide populaires
+// Liste 'cônes Lucide populaires
 const PREDEFINED_ICONS = [
   'Puzzle', 'Palette', 'Car', 'Basketball', 'Gamepad2', 'Music', 'Book', 'Baby', 'Drama', 'Target'
 ];
@@ -45,15 +46,48 @@ interface Category {
   updatedAt?: string;
 }
 
-const API_BASE_URL = typeof window !== 'undefined' 
-  ? (process.env.NEXT_PUBLIC_API_URL || '/api')
-  : 'http://localhost:3001/api';
+const sanitizeCategoryPayload = (categoryData: Partial<Category>, options?: { allowSlug?: boolean }) => {
+  const {
+    id,
+    createdAt,
+    updatedAt,
+    parent,
+    ...rest
+  } = categoryData;
+
+  const payload: Record<string, unknown> = { ...rest };
+
+  if (!options?.allowSlug) {
+    delete payload.slug;
+  } else if (typeof payload.slug === 'string') {
+    payload.slug = payload.slug.trim().toLowerCase();
+  } else if (typeof payload.name === 'string' && payload.name.trim().length > 0) {
+    payload.slug = payload.name
+      .toLowerCase()
+      .replace(/[éèêë]/g, "e")
+      .replace(/[àâä]/g, "a")
+      .replace(/[ôö]/g, "o")
+      .replace(/[ûüù]/g, "u")
+      .replace(/[ïî]/g, "i")
+      .replace(/ç/g, "c")
+      .replace(/[^a-z0-9]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+  }
+
+  if (payload.parentId === '' || payload.parentId === undefined) {
+    delete payload.parentId;
+  }
+
+  return payload;
+};
 
 export default function AdminCategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [emojiPresets, setEmojiPresets] = useState<string[]>(PREDEFINED_EMOJIS);
   
   const [newCategory, setNewCategory] = useState<Partial<Category>>({
     name: '',
@@ -74,18 +108,14 @@ export default function AdminCategoriesPage() {
     type: 'success'
   });
 
-  useEffect(() => {
-    loadCategories();
-  }, []);
-
-  const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+  const showNotification = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setNotification({ show: true, message, type });
     setTimeout(() => {
       setNotification(prev => ({ ...prev, show: false }));
     }, 3000);
-  };
+  }, []);
 
-  const loadCategories = async () => {
+  const loadCategories = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`${API_BASE_URL}/categories/all`);
@@ -101,7 +131,22 @@ export default function AdminCategoriesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showNotification]);
+
+  useEffect(() => {
+    loadCategories();
+    (async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/admin/emoji-presets?type=category`);
+        const body = await response.json().catch(() => ({}));
+        if (response.ok && body.data && Array.isArray(body.data)) {
+          setEmojiPresets(body.data);
+        }
+      } catch {
+        // Silent failure: presets are optional
+      }
+    })();
+  }, [loadCategories]);
 
   const generateSlug = (name: string) => {
     return name
@@ -124,10 +169,13 @@ export default function AdminCategoriesPage() {
     }
 
     try {
-      const dataToSend = {
-        ...categoryData,
-        slug: categoryData.slug || generateSlug(categoryData.name || ''),
-      };
+      const dataToSend = sanitizeCategoryPayload(
+        {
+          ...categoryData,
+          slug: categoryData.slug || generateSlug(categoryData.name || ''),
+        },
+        { allowSlug: true },
+      );
 
       const response = await fetch(`${API_BASE_URL}/categories`, {
         method: 'POST',
@@ -161,10 +209,11 @@ export default function AdminCategoriesPage() {
     if (!categoryData.id) return;
 
     try {
+      const payload = sanitizeCategoryPayload(categoryData, { allowSlug: false });
       const response = await fetch(`${API_BASE_URL}/categories/${categoryData.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(categoryData),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
@@ -374,7 +423,7 @@ export default function AdminCategoriesPage() {
           }}
           onSave={(data) => handleAddCategory(data)}
           isEditing={false}
-          predefinedEmojis={PREDEFINED_EMOJIS}
+          predefinedEmojis={emojiPresets}
           predefinedIcons={PREDEFINED_ICONS}
           categories={categories}
         />
@@ -388,7 +437,7 @@ export default function AdminCategoriesPage() {
           }}
           onSave={(data) => handleUpdateCategory(data)}
           isEditing={true}
-          predefinedEmojis={PREDEFINED_EMOJIS}
+          predefinedEmojis={emojiPresets}
           predefinedIcons={PREDEFINED_ICONS}
           categories={categories.filter(c => c.id !== editingCategory.id)}
         />
@@ -443,7 +492,6 @@ function CategoryModal({
 }) {
   const [formData, setFormData] = useState<Partial<Category>>(category);
   const [iconType, setIconType] = useState<'emoji' | 'upload' | 'icon'>(category.iconType || 'emoji');
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -462,7 +510,6 @@ function CategoryModal({
         alert('L\'image ne doit pas dépasser 2MB');
         return;
       }
-      setUploadedFile(file);
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
       setFormData({ ...formData, iconUrl: url, iconType: 'upload' });
@@ -563,7 +610,7 @@ function CategoryModal({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Ordre d'affichage
+                Ordre 'ffichage
               </label>
               <input
                 type="number"
@@ -595,10 +642,10 @@ function CategoryModal({
             )}
           </div>
 
-          {/* Sélection du type d'icône - Identique à celui des âges */}
+          {/* Sélection du type 'cône - Identique à celui des âges */}
           <div className="border-t border-gray-200 pt-6">
             <label className="block text-sm font-medium text-gray-700 mb-3">
-              Type d'icône
+              Type 'cône
             </label>
             <div className="flex gap-3 mb-4">
               <button
@@ -666,7 +713,7 @@ function CategoryModal({
               </div>
             )}
 
-            {/* Upload d'image */}
+            {/* Upload 'mage */}
             {iconType === 'upload' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -702,7 +749,7 @@ function CategoryModal({
               </div>
             )}
 
-            {/* Sélection d'icône Lucide */}
+            {/* Sélection 'cône Lucide */}
             {iconType === 'icon' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -743,7 +790,7 @@ function CategoryModal({
         <div className="p-6 border-t border-gray-200 bg-gray-50 rounded-b-2xl flex gap-3">
           <button
             onClick={handleSave}
-            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 px-6 py-3 text-white font-semibold hover:from-blue-600 hover:to-indigo-700 transition-all shadow-lg"
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-mint px-6 py-3 text-white font-semibold hover:bg-mint/90 transition-all shadow-lg"
           >
             <Save className="h-5 w-5" />
             {isEditing ? 'Sauvegarder' : 'Ajouter'}
@@ -760,4 +807,7 @@ function CategoryModal({
     </div>
   );
 }
+
+
+
 

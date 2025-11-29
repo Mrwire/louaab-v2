@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
+import { API_BASE_URL } from "@/lib/api/config";
 import {
   Package,
   Plus,
@@ -15,18 +16,17 @@ import {
   Smile,
   Image as ImageIcon,
   CheckCircle,
-  AlertCircle,
   RefreshCw,
 } from "lucide-react";
 
-// Liste d'icônes prédéfinies (emojis populaires pour les âges)
+// Liste 'cônes prédéfinies (emojis populaires pour les âges)
 const PREDEFINED_EMOJIS = [
   '👶', '🍼', '🧸', '🎈', '🎮', '🎯', '⚽', '🏀', '🚗', '🚂',
   '🎨', '📚', '🧩', '🎪', '🎭', '🎸', '🎹', '🎺', '🦁', '🐻',
   '🐰', '🐶', '🐱', '🦄', '🌟', '⭐', '💫', '🎁', '🎉', '🎊'
 ];
 
-// Liste d'icônes Lucide populaires
+// Liste 'cônes Lucide populaires
 const PREDEFINED_ICONS = [
   'Baby', 'Heart', 'Star', 'Sparkles', 'Gift', 'Cake', 'Music', 'Palette',
   'Book', 'Gamepad2', 'Trophy', 'Target', 'Zap', 'Sun', 'Moon', 'Flower'
@@ -47,17 +47,35 @@ interface AgeRange {
   updatedAt?: string;
 }
 
-const API_BASE_URL = typeof window !== 'undefined' 
-  ? (process.env.NEXT_PUBLIC_API_URL || '/api')
-  : 'http://localhost:3001/api';
+const sanitizeAgePayload = (data: Partial<AgeRange>, options?: { allowSlug?: boolean }) => {
+  const { id, createdAt, updatedAt, ...rest } = data;
+  const payload: Record<string, unknown> = { ...rest };
+  if (!options?.allowSlug) {
+    delete payload.slug;
+  } else if (typeof payload.slug === 'string') {
+    payload.slug = payload.slug.trim().toLowerCase();
+  } else if (typeof payload.label === 'string' && payload.label.trim()) {
+    payload.slug = payload.label
+      .toLowerCase()
+      .replace(/[éèêë]/g, 'e')
+      .replace(/[àâä]/g, 'a')
+      .replace(/[ôö]/g, 'o')
+      .replace(/[ûüù]/g, 'u')
+      .replace(/[ïî]/g, 'i')
+      .replace(/ç/g, 'c')
+      .replace(/[^a-z0-9]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+  return payload;
+};
 
 export default function AdminAgesPage() {
   const [ageRanges, setAgeRanges] = useState<AgeRange[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingAgeRange, setEditingAgeRange] = useState<AgeRange | null>(null);
-  const [selectedIconType, setSelectedIconType] = useState<'emoji' | 'upload' | 'icon'>('emoji');
-  const [uploadedIcon, setUploadedIcon] = useState<File | null>(null);
+  const [emojiPresets, setEmojiPresets] = useState<string[]>(PREDEFINED_EMOJIS);
   
   const [newAgeRange, setNewAgeRange] = useState<Partial<AgeRange>>({
     label: '',
@@ -80,18 +98,14 @@ export default function AdminAgesPage() {
     type: 'success'
   });
 
-  useEffect(() => {
-    loadAgeRanges();
-  }, []);
-
-  const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+  const showNotification = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setNotification({ show: true, message, type });
     setTimeout(() => {
       setNotification(prev => ({ ...prev, show: false }));
     }, 3000);
-  };
+  }, []);
 
-  const loadAgeRanges = async () => {
+  const loadAgeRanges = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`${API_BASE_URL}/age-ranges/all`);
@@ -107,7 +121,23 @@ export default function AdminAgesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showNotification]);
+
+  useEffect(() => {
+    loadAgeRanges();
+
+    (async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/admin/emoji-presets?type=age`);
+        const body = await response.json().catch(() => ({}));
+        if (response.ok && body.data && Array.isArray(body.data)) {
+          setEmojiPresets(body.data);
+        }
+      } catch {
+        // Optional best-effort fetch; ignore errors
+      }
+    })();
+  }, [loadAgeRanges]);
 
   const generateSlug = (label: string) => {
     return label
@@ -130,10 +160,13 @@ export default function AdminAgesPage() {
     }
 
     try {
-      const dataToSend = {
-        ...ageRangeData,
-        slug: ageRangeData.slug || generateSlug(ageRangeData.label || ''),
-      };
+      const dataToSend = sanitizeAgePayload(
+        {
+          ...ageRangeData,
+          slug: ageRangeData.slug || generateSlug(ageRangeData.label || ''),
+        },
+        { allowSlug: true },
+      );
 
       const response = await fetch(`${API_BASE_URL}/age-ranges`, {
         method: 'POST',
@@ -169,10 +202,11 @@ export default function AdminAgesPage() {
     if (!ageRangeData.id) return;
 
     try {
+      const payload = sanitizeAgePayload(ageRangeData, { allowSlug: false });
       const response = await fetch(`${API_BASE_URL}/age-ranges/${ageRangeData.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(ageRangeData),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
@@ -225,7 +259,7 @@ export default function AdminAgesPage() {
         />
       );
     } else if (ageRange.iconType === 'icon') {
-      // Pour les icônes Lucide, on afficherait l'icône correspondante
+      // Pour les icônes Lucide, on afficherait 'cône correspondante
       return <span className="text-4xl">🎯</span>;
     }
     return <span className="text-4xl">👶</span>;
@@ -257,8 +291,8 @@ export default function AdminAgesPage() {
               </a>
               <div className="h-6 w-px bg-gray-300"></div>
               <div>
-                <h1 className="text-xl font-bold text-charcoal">Gestion des Tranches d'Âges</h1>
-                <p className="text-sm text-gray-600">Gérez les catégories d'âges affichées sur le site</p>
+                <h1 className="text-xl font-bold text-charcoal">Gestion des Tranches ''ges</h1>
+                <p className="text-sm text-gray-600">G̩rez les cat̩gories բges affich̩es sur le site</p>
               </div>
             </div>
             <button
@@ -365,8 +399,8 @@ export default function AdminAgesPage() {
         {ageRanges.length === 0 && (
           <div className="text-center py-12">
             <Package className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-4 text-lg font-medium text-gray-900">Aucune tranche d'âge</h3>
-            <p className="mt-2 text-gray-600">Commencez par ajouter une tranche d'âge</p>
+            <h3 className="mt-4 text-lg font-medium text-gray-900">Aucune tranche '¢ge</h3>
+            <p className="mt-2 text-gray-600">Commencez par ajouter une tranche '¢ge</p>
           </div>
         )}
       </div>
@@ -390,7 +424,7 @@ export default function AdminAgesPage() {
           }}
           onSave={(data) => handleAddAgeRange(data)}
           isEditing={false}
-          predefinedEmojis={PREDEFINED_EMOJIS}
+          predefinedEmojis={emojiPresets}
           predefinedIcons={PREDEFINED_ICONS}
         />
       )}
@@ -403,7 +437,7 @@ export default function AdminAgesPage() {
           }}
           onSave={(data) => handleUpdateAgeRange(data)}
           isEditing={true}
-          predefinedEmojis={PREDEFINED_EMOJIS}
+          predefinedEmojis={emojiPresets}
           predefinedIcons={PREDEFINED_ICONS}
         />
       )}
@@ -455,7 +489,6 @@ function AgeRangeModal({
 }) {
   const [formData, setFormData] = useState<Partial<AgeRange>>(ageRange);
   const [iconType, setIconType] = useState<'emoji' | 'upload' | 'icon'>(ageRange.iconType || 'emoji');
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -474,7 +507,6 @@ function AgeRangeModal({
         alert('L\'image ne doit pas dépasser 2MB');
         return;
       }
-      setUploadedFile(file);
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
       setFormData({ ...formData, iconUrl: url, iconType: 'upload' });
@@ -507,7 +539,7 @@ function AgeRangeModal({
       slug: formData.slug || generateSlugFromLabel(formData.label || ''),
     };
     
-    // Si c'est une édition, on doit garder l'ID
+    // Si 'st une édition, on doit garder 'D
     if (isEditing && ageRange.id) {
       finalData.id = ageRange.id;
     }
@@ -591,7 +623,7 @@ function AgeRangeModal({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Ordre d'affichage
+                Ordre 'ffichage
               </label>
               <input
                 type="number"
@@ -603,10 +635,10 @@ function AgeRangeModal({
             </div>
           </div>
 
-          {/* Sélection du type d'icône */}
+          {/* Sélection du type 'cône */}
           <div className="border-t border-gray-200 pt-6">
             <label className="block text-sm font-medium text-gray-700 mb-3">
-              Type d'icône
+              Type 'cône
             </label>
             <div className="flex gap-3 mb-4">
               <button
@@ -674,7 +706,7 @@ function AgeRangeModal({
               </div>
             )}
 
-            {/* Upload d'image */}
+            {/* Upload 'mage */}
             {iconType === 'upload' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -710,7 +742,7 @@ function AgeRangeModal({
               </div>
             )}
 
-            {/* Sélection d'icône Lucide */}
+            {/* Sélection 'cône Lucide */}
             {iconType === 'icon' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -769,17 +801,6 @@ function AgeRangeModal({
   );
 }
 
-function generateSlug(label: string) {
-  return label
-    .toLowerCase()
-    .replace(/[éèêë]/g, 'e')
-    .replace(/[àâä]/g, 'a')
-    .replace(/[ôö]/g, 'o')
-    .replace(/[ûüù]/g, 'u')
-    .replace(/[ïî]/g, 'i')
-    .replace(/ç/g, 'c')
-    .replace(/[^a-z0-9]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
-}
+
+
 

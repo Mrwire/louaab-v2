@@ -6,8 +6,6 @@ import type { NextRequest } from 'next/server';
 export function middleware(request: NextRequest) {
   // Vérifier si l'en-tête de maintenance est présent
   // Cet en-tête sera ajouté par Nginx ou par un rewrite Next.js
-  const maintenanceHeader = request.headers.get('x-maintenance-mode');
-  
   // Pour le moment, on désactive le middleware de maintenance
   // car il ne peut pas accéder au système de fichiers dans Edge Runtime
   // La solution sera d'utiliser une base de données ou un service externe

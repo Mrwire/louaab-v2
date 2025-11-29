@@ -1,13 +1,13 @@
-﻿"use client";
+"use client";
 
-import { useState, useEffect } from "react";
-import { 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Save, 
-  X, 
-  Eye, 
+import { useState, useEffect, useCallback } from "react";
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Save,
+  X,
+  Eye,
   EyeOff,
   Package,
   DollarSign,
@@ -16,11 +16,15 @@ import {
   MapPin,
   Check,
   AlertCircle,
+  CheckCircle,
   Download,
   Upload,
-  RotateCcw
+  RotateCcw,
 } from "lucide-react";
-import { PackManager, Pack } from "@/lib/packs";
+import { Pack } from "@/lib/packs";
+
+// URL du backend API
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://louaab.ma/api';
 
 const availableColors = [
   { name: "mint", label: "Mint", class: "bg-mint" },
@@ -36,6 +40,25 @@ const availableCities = [
   "Settat", "El Jadida", "Khouribga", "Beni Mellal", "Marrakech"
 ];
 
+type ApiPack = {
+  id: string;
+  name?: string;
+  slug?: string;
+  description?: string;
+  price?: number | string;
+  toyCount?: number | string;
+  durationDays?: number | string;
+  features?: string | string[];
+  icon?: string;
+  displayOrder?: number | string;
+  isActive?: boolean;
+};
+
+type ApiPackResponse = {
+  data?: ApiPack[];
+  message?: string;
+};
+
 export default function AdminPacksPage() {  // Petit bouton en-tête pour push vers DB
   // (ceci gardera l'UI existante mais permet d'alimenter la BDD)
   // Tu peux déplacer ce bouton dans ta toolbar existante si besoin\n
@@ -43,26 +66,100 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
   const [editingPack, setEditingPack] = useState<Pack | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [notification, setNotification] = useState<{
+    show: boolean;
+    message: string;
+    type: 'success' | 'error';
+  }>({
+    show: false,
+    message: '',
+    type: 'success',
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
-  // Charger les packs depuis le service
-    // Bouton sync vers BDD
-  const syncPacksToDB = async () => {
-    try {
-      const res = await fetch(${typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_API_URL || '/api') : 'http://localhost:3001/api'}/admin/sync/packs, { method: 'POST' });
-      if (!res.ok) throw new Error('sync_failed');
-      // juste feedback UI: on ne rebranche pas toute la page maintenant
-      console.log('Packs synchronisés en BDD');
-    } catch (e) {
-      console.error('Échec de la synchronisation des packs', e);
-    }
-  };useEffect(() => {
-    setPacks(PackManager.getAllPacks());
+  const showNotification = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ show: true, message, type });
+    setTimeout(() => setNotification(prev => ({ ...prev, show: false })), 3000);
   }, []);
 
-  // Sauvegarder les packs via le service
-  const savePacks = (newPacks: Pack[]) => {
-    setPacks(newPacks);
-    PackManager.savePacks(newPacks);
+  // Helpers de mapping Backend <-> UI
+  const backendToUI = (b: ApiPack): Pack => ({
+    id: b.id,
+    name: b.name,
+    slug: b.slug,
+    description: b.description || '',
+    priceMonthly: Number(b.price || 0),
+    toyCount: Number(b.toyCount || 0),
+    durationMonths: Math.max(1, Math.round((b.durationDays || 30) / 30)),
+    depositAmount: 0,
+    swapIncluded: true,
+    swapFrequencyDays: 30,
+    citiesAvailable: [],
+    isActive: !!b.isActive,
+    displayOrder: Number(b.displayOrder || 0),
+    badge: undefined,
+    color: 'mint',
+    icon: b.icon || '🎁',
+    ageRange: '',
+    features: (() => { try { const f = typeof b.features === 'string' ? JSON.parse(b.features) : (b.features || []); return Array.isArray(f) ? f : []; } catch { return []; } })(),
+  });
+
+  const uiToBackend = (p: Pack) => ({
+    name: p.name,
+    slug: p.slug,
+    description: p.description,
+    type: 'custom',
+    price: p.priceMonthly,
+    toyCount: p.toyCount,
+    durationDays: Math.max(1, p.durationMonths * 30),
+    features: JSON.stringify(p.features || []),
+    icon: p.icon,
+    displayOrder: p.displayOrder,
+    isActive: p.isActive,
+  });
+
+  const loadPacks = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/packs`);
+      const body = (await res.json().catch(() => ({}))) as ApiPackResponse;
+      if (res.ok && Array.isArray(body.data)) {
+        setPacks(body.data.map(backendToUI));
+      } else {
+        setPacks([]);
+      }
+    } catch {
+      setPacks([]);
+      showNotification('Impossible de charger les packs', 'error');
+    }
+  }, [showNotification]);
+
+  const syncPacksToDB = async () => {
+    try {
+      setIsSyncing(true);
+      const res = await fetch(`${API_BASE_URL}/admin/sync/packs`, { method: 'POST' });
+      if (!res.ok) throw new Error();
+      await loadPacks();
+      showNotification('Packs synchronisés depuis le template', 'success');
+    } catch {
+      showNotification('Échec de la synchronisation des packs', 'error');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  useEffect(() => { loadPacks(); }, [loadPacks]);
+
+
+  // Sauvegarder un pack via l'API
+  const savePackAPI = async (p: Pack, isNew: boolean) => {
+    const payload = uiToBackend(p);
+    const url = isNew ? `${API_BASE_URL}/packs` : `${API_BASE_URL}/packs/${p.id}`;
+    const method = isNew ? 'POST' : 'PATCH';
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if (!res.ok) throw new Error('save_failed');
+    await loadPacks();
   };
 
   const handleEdit = (pack: Pack) => {
@@ -87,7 +184,7 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
       displayOrder: packs.length + 1,
       badge: undefined,
       color: "mint",
-      icon: "ðŸŽ",
+      icon: "🎁",
       ageRange: "0-8 ans",
       features: []
     };
@@ -95,62 +192,105 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
     setIsCreating(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editingPack) return;
-
-    const newPacks = isCreating 
-      ? [...packs, editingPack]
-      : packs.map(p => p.id === editingPack.id ? editingPack : p);
-    
-    savePacks(newPacks);
-    setEditingPack(null);
-    setIsCreating(false);
+    setIsSaving(true);
+    try {
+      await savePackAPI(editingPack, isCreating);
+      showNotification(isCreating ? 'Pack créé' : 'Pack mis à jour', 'success');
+      setEditingPack(null);
+      setIsCreating(false);
+    } catch {
+      showNotification('Impossible de sauvegarder le pack', 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDelete = (packId: string) => {
-    if (confirm('ÃŠtes-vous sÃ»r de vouloir supprimer ce pack ?')) {
-      PackManager.deletePack(packId);
-      setPacks(PackManager.getAllPacks());
+    if (confirm('Supprimer ce pack ?')) {
+      fetch(`${API_BASE_URL}/packs/${packId}`, { method: 'DELETE' })
+        .then(() => {
+          showNotification('Pack supprimé', 'success');
+          loadPacks();
+        })
+        .catch(() => showNotification('Suppression impossible', 'error'));
     }
   };
 
   const handleToggleActive = (packId: string) => {
-    PackManager.togglePackActive(packId);
-    setPacks(PackManager.getAllPacks());
+    const target = packs.find(p => p.id === packId);
+    if (!target) return;
+    const payload = uiToBackend({ ...target, isActive: !target.isActive } as Pack);
+    fetch(`${API_BASE_URL}/packs/${packId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(() => loadPacks())
+      .catch(() => showNotification('Impossible de changer le statut', 'error'));
   };
 
   const handleExport = () => {
-    const data = PackManager.exportPacks();
+    const data = JSON.stringify(packs, null, 2);
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'packs-backup.json';
+    a.download = 'packs-export.json';
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const content = e.target?.result as string;
-        if (PackManager.importPacks(content)) {
-          setPacks(PackManager.getAllPacks());
-          alert('Packs importÃ©s avec succÃ¨s !');
-        } else {
-          alert('Erreur lors de l\'importation des packs.');
+  const handleImportAPI = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    const confirmImport = confirm(`Importer les packs depuis "${file.name}" ?`);
+    if (!confirmImport) {
+      input.value = '';
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const content = await file.text();
+      const arr = JSON.parse(content);
+      if (!Array.isArray(arr)) {
+        throw new Error('invalid_file');
+      }
+
+      for (const raw of arr) {
+        const packCandidate = raw as Pack;
+        const isNew = !packCandidate.id;
+        const url = isNew ? `${API_BASE_URL}/packs` : `${API_BASE_URL}/packs/${packCandidate.id}`;
+        const method = isNew ? 'POST' : 'PATCH';
+        const response = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(uiToBackend(packCandidate)),
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body?.message || 'import_failed');
         }
-      };
-      reader.readAsText(file);
+      }
+
+      await loadPacks();
+      showNotification('Import terminé', 'success');
+    } catch (error) {
+      console.error('Import packs error:', error);
+      showNotification('Fichier invalide ou import impossible', 'error');
+    } finally {
+      input.value = '';
+      setIsImporting(false);
     }
   };
 
-  const handleReset = () => {
-    if (confirm('ÃŠtes-vous sÃ»r de vouloir rÃ©initialiser aux packs par dÃ©faut ? Cette action supprimera tous les packs personnalisÃ©s.')) {
-      PackManager.resetToDefault();
-      setPacks(PackManager.getAllPacks());
+  const handleResetAPI = async () => {
+    if (confirm('Réinitialiser aux packs par défaut (BDD) ?')) {
+      await syncPacksToDB();
     }
   };
 
@@ -204,6 +344,19 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {notification.show && (
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg ${notification.type === 'success' ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
+          {notification.type === 'success' ? (
+            <CheckCircle className="h-5 w-5 text-green-600" />
+          ) : (
+            <AlertCircle className="h-5 w-5 text-red-600" />
+          )}
+          <span className="text-sm font-medium">{notification.message}</span>
+          <button onClick={() => setNotification(prev => ({ ...prev, show: false }))} className="text-xs text-gray-500 hover:text-gray-700">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="mx-auto max-w-7xl px-4 py-4">
@@ -213,7 +366,7 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
                 href="/admin/dashboard" 
                 className="text-sm text-gray-600 hover:text-mint transition-colors"
               >
-                â† Dashboard
+                ← Dashboard
               </a>
               <div className="h-6 w-px bg-gray-300"></div>
               <div>
@@ -227,7 +380,7 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
                 className="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 transition"
               >
                 {showPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                {showPreview ? 'Masquer' : 'AperÃ§u'}
+                {showPreview ? 'Masquer' : 'Aperçu'}
               </button>
               <button
                 onClick={handleExport}
@@ -236,19 +389,39 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
                 <Download className="h-4 w-4" />
                 Exporter
               </button>
-              <label className="flex items-center gap-2 rounded-lg bg-green-100 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-200 transition cursor-pointer">
-                <Upload className="h-4 w-4" />
-                Importer
+              <button
+                onClick={syncPacksToDB}
+                disabled={isSyncing}
+                className="flex items-center gap-2 rounded-lg bg-purple-100 px-3 py-2 text-sm font-medium text-purple-700 hover:bg-purple-200 transition disabled:cursor-not-allowed disabled:opacity-60"
+                title="Synchroniser les packs par défaut vers la BDD"
+              >
+                {isSyncing ? (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" />
+                ) : (
+                  <RotateCcw className="h-4 w-4" />
+                )}
+                Sync DB
+              </button>
+              <label
+                className={`flex items-center gap-2 rounded-lg bg-green-100 px-3 py-2 text-sm font-medium text-green-700 transition cursor-pointer ${isImporting ? 'opacity-60 pointer-events-none' : 'hover:bg-green-200'}`}
+              >
+                {isImporting ? (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-green-600 border-t-transparent" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+                {isImporting ? 'Import...' : 'Importer'}
                 <input
                   type="file"
                   accept=".json"
-                  onChange={handleImport}
+                  onChange={handleImportAPI}
                   className="hidden"
                 />
               </label>
               <button
-                onClick={handleReset}
-                className="flex items-center gap-2 rounded-lg bg-red-100 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-200 transition"
+                onClick={handleResetAPI}
+                disabled={isSyncing}
+                className="flex items-center gap-2 rounded-lg bg-red-100 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-200 transition disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <RotateCcw className="h-4 w-4" />
                 Reset
@@ -345,7 +518,7 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
                     onClick={() => handleToggleActive(pack.id)}
                     className="flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-1 text-sm text-gray-600 hover:bg-gray-200"
                   >
-                    {pack.isActive ? 'DÃ©sactiver' : 'Activer'}
+                    {pack.isActive ? 'Désactiver' : 'Activer'}
                   </button>
                   <button
                     onClick={() => handleEdit(pack)}
@@ -382,7 +555,7 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4 text-gray-400" />
                   <div>
-                    <p className="text-xs text-slate">DurÃ©e</p>
+                    <p className="text-xs text-slate">Durée</p>
                     <p className="text-sm font-medium text-charcoal">{pack.durationMonths} mois</p>
                   </div>
                 </div>
@@ -404,7 +577,7 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
             <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-charcoal">
-                  {isCreating ? 'CrÃ©er un nouveau pack' : 'Modifier le pack'}
+                  {isCreating ? 'Créer un nouveau pack' : 'Modifier le pack'}
                 </h2>
                 <button
                   onClick={() => setEditingPack(null)}
@@ -461,13 +634,13 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate mb-2">IcÃ´ne</label>
+                    <label className="block text-sm font-medium text-slate mb-2">Icône</label>
                     <input
                       type="text"
                       value={editingPack.icon}
                       onChange={(e) => setEditingPack({...editingPack, icon: e.target.value})}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-charcoal focus:border-mint focus:outline-none"
-                      placeholder="ðŸŽ"
+                      placeholder="🎁"
                     />
                   </div>
 
@@ -528,7 +701,7 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-slate mb-2">DurÃ©e (mois)</label>
+                      <label className="block text-sm font-medium text-slate mb-2">Durée (mois)</label>
                       <input
                         type="number"
                         value={editingPack.durationMonths}
@@ -539,7 +712,7 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate mb-2">Tranche d'Ã¢ge</label>
+                    <label className="block text-sm font-medium text-slate mb-2">Tranche d&apos;âge</label>
                     <input
                       type="text"
                       value={editingPack.ageRange}
@@ -557,13 +730,13 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
                         onChange={(e) => setEditingPack({...editingPack, swapIncluded: e.target.checked})}
                         className="rounded border-gray-300 text-mint focus:ring-mint"
                       />
-                      <span className="text-sm text-slate">Ã‰changes inclus</span>
+                      <span className="text-sm text-slate">Échanges inclus</span>
                     </label>
                   </div>
 
                   {editingPack.swapIncluded && (
                     <div>
-                      <label className="block text-sm font-medium text-slate mb-2">FrÃ©quence d'Ã©change (jours)</label>
+                      <label className="block text-sm font-medium text-slate mb-2">Fréquence d&apos;échange (jours)</label>
                       <input
                         type="number"
                         value={editingPack.swapFrequencyDays || 30}
@@ -613,7 +786,7 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
 
               {/* Features */}
               <div className="mt-6">
-                <h3 className="text-lg font-semibold text-charcoal mb-4">FonctionnalitÃ©s</h3>
+                <h3 className="text-lg font-semibold text-charcoal mb-4">Fonctionnalités</h3>
                 <div className="space-y-2">
                   {editingPack.features.map((feature, index) => (
                     <div key={index} className="flex items-center gap-2">
@@ -622,7 +795,7 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
                         value={feature}
                         onChange={(e) => updateFeature(index, e.target.value)}
                         className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-charcoal focus:border-mint focus:outline-none"
-                        placeholder="FonctionnalitÃ© du pack"
+                        placeholder="Fonctionnalité du pack"
                       />
                       <button
                         onClick={() => removeFeature(index)}
@@ -637,7 +810,7 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
                     className="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-600 hover:bg-gray-200"
                   >
                     <Plus className="h-4 w-4" />
-                    Ajouter une fonctionnalitÃ©
+                    Ajouter une fonctionnalité
                   </button>
                 </div>
               </div>
@@ -652,10 +825,15 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
                 </button>
                 <button
                   onClick={handleSave}
-                  className="flex items-center gap-2 rounded-lg bg-mint px-4 py-2 text-sm font-medium text-white hover:bg-mint/90"
+                  disabled={isSaving}
+                  className="flex items-center gap-2 rounded-lg bg-mint px-4 py-2 text-sm font-medium text-white hover:bg-mint/90 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  <Save className="h-4 w-4" />
-                  Sauvegarder
+                  {isSaving ? (
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  {isSaving ? 'Enregistrement...' : 'Sauvegarder'}
                 </button>
               </div>
             </div>
@@ -667,7 +845,7 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
             <div className="w-full max-w-6xl max-h-[90vh] overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-charcoal">AperÃ§u des packs</h2>
+                <h2 className="text-xl font-bold text-charcoal">Aperçu des packs</h2>
                 <button
                   onClick={() => setShowPreview(false)}
                   className="rounded-lg bg-gray-100 p-2 text-gray-600 hover:bg-gray-200"
@@ -686,7 +864,7 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
                   >
                     {pack.badge && (
                       <div className="absolute left-0 right-0 top-0 bg-gradient-to-r from-mint to-fresh-green py-2 text-center text-sm font-bold uppercase tracking-wide text-white">
-                        â­ {pack.badge}
+                        ⭐ {pack.badge}
                       </div>
                     )}
 
@@ -731,5 +909,11 @@ export default function AdminPacksPage() {  // Petit bouton en-tête pour push v
     </div>
   );
 }
+
+
+
+
+
+
 
 

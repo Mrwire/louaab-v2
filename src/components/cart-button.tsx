@@ -5,6 +5,7 @@ import { ShoppingCart, Plus, Minus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/contexts/cart-context";
 import { ToyData } from "@/lib/toys-data";
+import { formatDateInput } from "@/lib/date";
 
 interface CartButtonProps {
   toy: ToyData;
@@ -19,12 +20,23 @@ export default function CartButton({ toy, className = "", allowDirectAdd = false
 
   // Durée par défaut pour l'ajout rapide
   const defaultDuration = "weekly";
-  const itemId = `${toy.id}-${defaultDuration}`;
+  const toyKey = toy.backendId ?? String(toy.id);
+  const itemId = `${toyKey}-${defaultDuration}`;
+  const availableStock = Math.max(
+    0,
+    Number(
+      toy.stockQuantity ??
+        (toy as any).availableQuantity ??
+        toy.stock ??
+        (items.find(i => (i.toy.backendId ?? String(i.toy.id)) === toyKey)?.toy.stock)
+    ) || 0
+  );
   
   const cartItem = items.find(item => item.id === itemId);
   const isInCart = !!cartItem;
 
   const handleClick = () => {
+    if (availableStock <= 0) return;
     // Si l'ajout direct n'est pas autorisé, rediriger vers la page de détail
     if (!allowDirectAdd) {
       router.push(`/jouets/${toy.slug}`);
@@ -35,7 +47,7 @@ export default function CartButton({ toy, className = "", allowDirectAdd = false
     setIsAdding(true);
     
     // Valeurs par défaut pour l'ajout rapide
-    const defaultDate = new Date().toISOString().split('T')[0];
+    const defaultDate = formatDateInput();
     
     addToCart(toy, defaultDuration, defaultDate);
     
@@ -84,18 +96,22 @@ export default function CartButton({ toy, className = "", allowDirectAdd = false
     return (
       <button
         onClick={handleClick}
-        disabled={isAdding}
+        disabled={isAdding || availableStock <= 0}
         className={`flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-medium transition disabled:opacity-50 shadow-md hover:shadow-lg transform hover:scale-105 active:scale-95 ${className}`}
         style={{
           background: 'linear-gradient(to right, #1897aa, #0d74b1)',
           color: '#ffffff'
         }}
-        title={allowDirectAdd ? "Ajouter au panier" : "Configurer la location"}
+        title={availableStock > 0 ? (allowDirectAdd ? "Ajouter au panier" : "Configurer la location") : "Rupture de stock"}
       >
         {isAdding ? (
           <div className="h-4 w-4 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: '#ffffff', borderTopColor: 'transparent' }}></div>
         ) : (
-          <ShoppingCart className="h-4 w-4" style={{ color: '#ffffff' }} />
+          availableStock > 0 ? (
+            <ShoppingCart className="h-4 w-4" style={{ color: '#ffffff' }} />
+          ) : (
+            <span className="text-xs font-semibold" style={{ color: '#ffffff' }}>Rupture</span>
+          )
         )}
       </button>
     );
