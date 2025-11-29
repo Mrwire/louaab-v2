@@ -222,9 +222,9 @@ const mapLocalToy = (toy: ToyData, index: number): ToyData => {
 };
 
 const buildToyKey = (toy: ToyData) => {
-  if (toy.slug) return slugify(toy.slug);
+  if (toy.slug) return slugify(toy.slug).replace(/-/g, '');
   if (toy.backendId) return String(toy.backendId).toLowerCase();
-  return slugify(toy.name || String(toy.id));
+  return slugify(toy.name || String(toy.id)).replace(/-/g, '');
 };
 
 const getStockValue = (toy: ToyData) => {

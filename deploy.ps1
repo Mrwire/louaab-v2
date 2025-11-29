@@ -24,7 +24,8 @@ Write-Host "✅ Archive créée: $([math]::Round($compressedSize, 2)) MB" -Foreg
 
 # Transférer les fichiers
 Write-Host "📤 Transfert des fichiers vers le serveur..." -ForegroundColor Yellow
-scp .next.tar.gz package.json package-lock.json root@164.90.190.154:/var/www/louaab/
+$keyPath = "C:\Users\oussa\.gemini\antigravity\brain\1fcbcedd-2452-43f4-bcdb-210c2bd697b3\id_rsa_2"
+scp -i $keyPath .next.tar.gz package.json package-lock.json root@164.90.190.154:/var/www/louaab/
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Erreur lors du transfert." -ForegroundColor Red
@@ -42,7 +43,7 @@ $commands = @(
     "pm2 restart all"
 ) -join ' && '
 
-ssh root@164.90.190.154 $commands
+ssh -i $keyPath root@164.90.190.154 "$commands"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Erreur lors du déploiement sur le serveur." -ForegroundColor Red
