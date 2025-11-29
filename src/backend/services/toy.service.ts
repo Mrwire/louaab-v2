@@ -23,7 +23,7 @@ export class ToyService {
     private categoryRepository: Repository<ToyCategory>,
     @InjectRepository(ToyImage)
     private imageRepository: Repository<ToyImage>,
-  ) {}
+  ) { }
 
   private async generateUniqueSlug(baseValue: string, excludeId?: string) {
     let base = slugify(baseValue);
@@ -55,7 +55,7 @@ export class ToyService {
 
     // Create toy
     const toy = this.toyRepository.create(toyData);
-    
+
     // Handle categories
     if (categoryIds && categoryIds.length > 0) {
       const categories = await this.categoryRepository.findBy({
@@ -117,12 +117,13 @@ export class ToyService {
       queryBuilder.andWhere('toy.status = :status', { status });
     }
 
-    // Age filter
-    if (ageMin !== undefined) {
-      queryBuilder.andWhere('toy.ageMin >= :ageMin', { ageMin });
-    }
-    if (ageMax !== undefined) {
-      queryBuilder.andWhere('toy.ageMax <= :ageMax', { ageMax });
+    // Age filter (Overlap logic)
+    if (ageMin !== undefined || ageMax !== undefined) {
+      const qMin = ageMin ?? 0;
+      const qMax = ageMax ?? 999;
+
+      queryBuilder.andWhere('(toy.ageMin IS NULL OR toy.ageMin <= :qMax)', { qMax });
+      queryBuilder.andWhere('(toy.ageMax IS NULL OR toy.ageMax >= :qMin)', { qMin });
     }
 
     // Category filter
@@ -232,7 +233,7 @@ export class ToyService {
     if (images) {
       // Remove old images
       await this.imageRepository.delete({ toy: { id } });
-      
+
       // Add new images
       const toyImages = images.map((img, index) =>
         this.imageRepository.create({
@@ -257,12 +258,12 @@ export class ToyService {
   async updateStatus(id: string, status: ToyStatus): Promise<Toy> {
     const toy = await this.findOne(id);
     toy.status = status;
-    
+
     // Auto-update last cleaned date if status is 'available'
     if (status === ToyStatus.AVAILABLE) {
       toy.lastCleaned = new Date();
     }
-    
+
     await this.toyRepository.save(toy);
     return toy;
   }
@@ -306,5 +307,3 @@ export class ToyService {
     return updated;
   }
 }
-
-

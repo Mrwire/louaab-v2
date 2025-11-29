@@ -161,9 +161,9 @@ const mapBackendToy = (toy: ApiToy, index: number): ToyData => {
 
   const categories = Array.isArray(toy.categories)
     ? toy.categories
-        .map((cat) => cat?.name)
-        .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
-        .join(', ')
+      .map((cat) => cat?.name)
+      .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+      .join(', ')
     : '';
 
   const imageUrl = ensureImageUrl(toy.images);
@@ -222,8 +222,8 @@ const mapLocalToy = (toy: ToyData, index: number): ToyData => {
 };
 
 const buildToyKey = (toy: ToyData) => {
-  if (toy.backendId) return String(toy.backendId).toLowerCase();
   if (toy.slug) return slugify(toy.slug);
+  if (toy.backendId) return String(toy.backendId).toLowerCase();
   return slugify(toy.name || String(toy.id));
 };
 

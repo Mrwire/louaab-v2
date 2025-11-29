@@ -6,6 +6,7 @@ import { API_BASE_URL } from "@/lib/api/config";
 import ToyCardWithReservation from "@/components/toy-card-with-reservation";
 import { getAllToys } from "@/lib/toys-data";
 import type { ToyData } from "@/lib/toys-data";
+
 interface AgeRange {
   id: string;
   label: string;
@@ -125,23 +126,21 @@ async function fetchAgeRanges(): Promise<AgeRange[]> {
   return [];
 }
 
-const mapToyToAgeRange = (toy: ToyWithAge, ageRanges: AgeRange[]): AgeRange | null => {
-  if (!ageRanges.length) return null;
+// Helper to check if a toy overlaps with an age range
+const isToyInAgeRange = (toy: ToyWithAge, range: AgeRange) => {
   const bounds = getToyAgeBounds(toy);
-  if (bounds.min === null) return null;
+  if (bounds.min === null) return false;
 
-  if (toy.age) {
-    const direct = ageRanges.find((range) => normalizeToSlug(range.slug || range.label) === normalizeToSlug(toy.age || ""));
-    if (direct) return direct;
-  }
+  const { min: rangeMin, max: rangeMax } = getRangeBoundsInMonths(range);
+  const toyMin = bounds.min;
+  const toyMax = bounds.max ?? bounds.min;
+  const effectiveToyMax = toyMax === null ? Infinity : toyMax;
 
-  return (
-    ageRanges.find((range) => {
-      const { min, max } = getRangeBoundsInMonths(range);
-      const toyMax = bounds.max ?? bounds.min;
-      return bounds.min >= min && toyMax <= max && toyMax >= min;
-    }) || null
-  );
+  // Check overlap: max(start1, start2) <= min(end1, end2)
+  const overlapStart = Math.max(toyMin, rangeMin);
+  const overlapEnd = Math.min(effectiveToyMax, rangeMax);
+
+  return overlapStart <= overlapEnd;
 };
 
 export async function generateStaticParams() {
@@ -173,7 +172,7 @@ export default async function AgeDetailPage({ params }: { params: { age: string 
     null;
 
   const toysForAge = currentAge
-    ? toys.filter((toy) => mapToyToAgeRange(toy as ToyWithAge, ageRanges)?.id === currentAge.id)
+    ? toys.filter((toy) => isToyInAgeRange(toy as ToyWithAge, currentAge))
     : toys.filter((toy) => normalizeToSlug(toy.age || "") === slug);
 
   return (
