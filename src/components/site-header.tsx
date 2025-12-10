@@ -8,6 +8,7 @@ import CartIcon from "./cart-icon";
 import FavoritesDropdown from "./favorites-dropdown";
 import HeaderSearch from "./header-search";
 import { useRef } from "react";
+import MobileSearchModal from "./mobile-search-modal";
 
 const NAV_LINKS = [
   { href: "/jouets", label: "Jouets" },
@@ -22,6 +23,7 @@ const NAV_LINKS = [
 export function SiteHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchActive, setSearchActive] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const searchWrapRef = useRef<HTMLDivElement | null>(null);
 
@@ -30,7 +32,7 @@ export function SiteHeader() {
     const checkDesktop = () => {
       setIsDesktop(window.innerWidth >= 1024);
     };
-    
+
     checkDesktop();
     window.addEventListener('resize', checkDesktop);
     return () => window.removeEventListener('resize', checkDesktop);
@@ -52,10 +54,10 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-xl shadow-sm">
       <div className="mx-auto w-full max-w-7xl px-4 lg:px-6">
-        
+
         {/* Header Principal */}
         <div className="flex h-16 items-center justify-between gap-4">
-          
+
           {/* Section Gauche: Logo + Burger */}
           <div className="flex shrink-0 items-center gap-3">
             {/* Menu Burger - Mobile uniquement - CACHÉ sur desktop avec JavaScript */}
@@ -111,11 +113,17 @@ export function SiteHeader() {
 
           {/* Section Droite: Recherche + Actions */}
           <div className="flex shrink-0 items-center gap-2">
-            
+
             {/* Bouton Recherche - Tous les écrans */}
             <button
               type="button"
-              onClick={() => setSearchActive((s) => !s)}
+              onClick={() => {
+                if (isDesktop) {
+                  setSearchActive((s) => !s);
+                } else {
+                  setMobileSearchOpen(true);
+                }
+              }}
               className={`flex h-10 w-10 items-center justify-center rounded-xl border text-charcoal transition-all duration-200 ${searchActive ? 'border-mint bg-mint/15 shadow-sm' : 'border-mist hover:border-mint hover:bg-mint/10'}`}
               aria-label="Rechercher"
               aria-expanded={searchActive}
@@ -145,16 +153,16 @@ export function SiteHeader() {
                   {link.label}
                 </Link>
               ))}
-              {/* Recherche inline sur mobile quand active */}
-              {searchActive && (
-                <div ref={searchWrapRef} className="mt-2">
-                  <HeaderSearch />
-                </div>
-              )}
             </nav>
           </div>
         )}
       </div>
+
+      {/* Mobile Search Modal */}
+      <MobileSearchModal
+        isOpen={mobileSearchOpen}
+        onClose={() => setMobileSearchOpen(false)}
+      />
     </header>
   );
 }
