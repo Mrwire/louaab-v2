@@ -11,6 +11,8 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.QueryToysDto = exports.UpdateToyDto = exports.CreateToyDto = void 0;
 const class_validator_1 = require("class-validator");
+const class_transformer_1 = require("class-transformer");
+const mapped_types_1 = require("@nestjs/mapped-types");
 const toy_entity_1 = require("../entities/toy.entity");
 class CreateToyDto {
 }
@@ -20,6 +22,11 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateToyDto.prototype, "sku", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateToyDto.prototype, "slug", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -41,31 +48,37 @@ __decorate([
 ], CreateToyDto.prototype, "videoUrl", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateToyDto.prototype, "purchasePrice", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateToyDto.prototype, "rentalPriceDaily", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateToyDto.prototype, "rentalPriceWeekly", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateToyDto.prototype, "rentalPriceMonthly", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateToyDto.prototype, "depositAmount", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
     (0, class_validator_1.Min)(0),
     (0, class_validator_1.Max)(18),
@@ -73,6 +86,7 @@ __decorate([
 ], CreateToyDto.prototype, "ageMin", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
     (0, class_validator_1.Min)(0),
     (0, class_validator_1.Max)(18),
@@ -80,11 +94,13 @@ __decorate([
 ], CreateToyDto.prototype, "ageMax", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateToyDto.prototype, "playerCountMin", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateToyDto.prototype, "playerCountMax", void 0);
@@ -105,11 +121,20 @@ __decorate([
 ], CreateToyDto.prototype, "condition", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateToyDto.prototype, "stockQuantity", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(0),
+    __metadata("design:type", Number)
+], CreateToyDto.prototype, "availableQuantity", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
     (0, class_validator_1.Min)(1),
     (0, class_validator_1.Max)(5),
@@ -127,6 +152,7 @@ __decorate([
 ], CreateToyDto.prototype, "location", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateToyDto.prototype, "minRentalQuantity", void 0);
@@ -151,13 +177,14 @@ __decorate([
     (0, class_validator_1.IsArray)(),
     __metadata("design:type", Array)
 ], CreateToyDto.prototype, "images", void 0);
-class UpdateToyDto extends CreateToyDto {
+// Make all fields optional for PATCH operations
+class UpdateToyDto extends (0, mapped_types_1.PartialType)(CreateToyDto) {
 }
 exports.UpdateToyDto = UpdateToyDto;
 class QueryToysDto {
     constructor() {
         this.page = 1;
-        this.limit = 20;
+        this.limit = 500;
         this.sortBy = 'createdAt';
         this.sortOrder = 'DESC';
     }
@@ -176,11 +203,13 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
+    (0, class_transformer_1.Type)(() => Number),
     __metadata("design:type", Number)
 ], QueryToysDto.prototype, "ageMin", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
+    (0, class_transformer_1.Type)(() => Number),
     __metadata("design:type", Number)
 ], QueryToysDto.prototype, "ageMax", void 0);
 __decorate([
@@ -197,13 +226,15 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
     (0, class_validator_1.Min)(1),
+    (0, class_transformer_1.Type)(() => Number),
     __metadata("design:type", Number)
 ], QueryToysDto.prototype, "page", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
     (0, class_validator_1.Min)(1),
-    (0, class_validator_1.Max)(100),
+    (0, class_validator_1.Max)(1000),
+    (0, class_transformer_1.Type)(() => Number),
     __metadata("design:type", Number)
 ], QueryToysDto.prototype, "limit", void 0);
 __decorate([

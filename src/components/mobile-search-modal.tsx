@@ -30,7 +30,7 @@ export default function MobileSearchModal({ isOpen, onClose }: MobileSearchModal
     if (isOpen && inputRef.current) {
       setTimeout(() => {
         inputRef.current?.focus();
-      }, 100);
+      }, 300);
     }
   }, [isOpen]);
 
@@ -81,7 +81,7 @@ export default function MobileSearchModal({ isOpen, onClose }: MobileSearchModal
           >
             <ArrowLeft size={20} />
           </button>
-          
+
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 h-5 w-5 z-10" />
             <input
@@ -132,7 +132,7 @@ export default function MobileSearchModal({ isOpen, onClose }: MobileSearchModal
                 {searchResults.length} résultat{searchResults.length > 1 ? 's' : ''} pour <span className="font-semibold">"{searchQuery}"</span>
               </p>
             </div>
-            
+
             {searchResults.map((toy) => (
               <Link
                 key={toy.backendId ?? toy.id}
@@ -165,7 +165,7 @@ export default function MobileSearchModal({ isOpen, onClose }: MobileSearchModal
                 </div>
               </Link>
             ))}
-            
+
             {/* Footer avec bouton voir tous */}
             {searchResults.length >= 20 && (
               <div className="p-4 text-center bg-white border-t border-gray-100">

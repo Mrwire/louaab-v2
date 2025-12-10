@@ -30,14 +30,60 @@ const typeorm_2 = require("typeorm");
 const toy_entity_1 = require("../entities/toy.entity");
 const toy_category_entity_1 = require("../entities/toy-category.entity");
 const toy_image_entity_1 = require("../entities/toy-image.entity");
+const stock_gateway_1 = require("../gateways/stock.gateway");
+const slugify = (value) => value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)+/g, '');
 let ToyService = class ToyService {
-    constructor(toyRepository, categoryRepository, imageRepository) {
+    constructor(toyRepository, categoryRepository, imageRepository, stockGateway) {
         this.toyRepository = toyRepository;
         this.categoryRepository = categoryRepository;
         this.imageRepository = imageRepository;
+        this.stockGateway = stockGateway;
+    }
+    emitStockUpdate(toy) {
+        if (this.stockGateway) {
+            const update = {
+                toyId: toy.id,
+                slug: toy.slug,
+                name: toy.name,
+                stockQuantity: Number(toy.stockQuantity) || 0,
+                availableQuantity: Number(toy.availableQuantity) || 0,
+                status: toy.status,
+                timestamp: Date.now(),
+            };
+            this.stockGateway.emitStockUpdate(update);
+        }
+    }
+    async generateUniqueSlug(baseValue, excludeId) {
+        let base = slugify(baseValue);
+        if (!base) {
+            base = `toy-${Date.now()}`;
+        }
+        let slugCandidate = base;
+        let counter = 1;
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+            const existing = await this.toyRepository.findOne({
+                where: { slug: slugCandidate },
+            });
+            if (!existing || existing.id === excludeId) {
+                return slugCandidate;
+            }
+            slugCandidate = `${base}-${counter++}`;
+        }
     }
     async create(createToyDto) {
         const { categoryIds, images } = createToyDto, toyData = __rest(createToyDto, ["categoryIds", "images"]);
+        if (!toyData.slug && toyData.name) {
+            toyData.slug = await this.generateUniqueSlug(toyData.name);
+        }
+        else if (toyData.slug) {
+            toyData.slug = await this.generateUniqueSlug(toyData.slug);
+        }
         // Create toy
         const toy = this.toyRepository.create(toyData);
         // Handle categories
@@ -47,8 +93,22 @@ let ToyService = class ToyService {
             });
             toy.categories = categories;
         }
-        // Save toy
-        const savedToy = await this.toyRepository.save(toy);
+        // Save toy (handle unique conflicts gracefully)
+        let savedToy;
+        try {
+            savedToy = await this.toyRepository.save(toy);
+        }
+        catch (error) {
+            if ((error === null || error === void 0 ? void 0 : error.code) === '23505') {
+                const field = typeof (error === null || error === void 0 ? void 0 : error.detail) === 'string' && error.detail.includes('(slug)')
+                    ? 'slug'
+                    : typeof (error === null || error === void 0 ? void 0 : error.detail) === 'string' && error.detail.includes('(sku)')
+                        ? 'sku'
+                        : 'champ unique';
+                throw new common_1.ConflictException(`Un ${field} identique existe déjà. Merci de changer le ${field}.`);
+            }
+            throw error;
+        }
         // Handle images
         if (images && images.length > 0) {
             const toyImages = images.map((img, index) => this.imageRepository.create({
@@ -107,12 +167,26 @@ let ToyService = class ToyService {
         };
     }
     async findOne(id) {
-        const toy = await this.toyRepository.findOne({
-            where: { id },
-            relations: ['categories', 'images', 'cleaningLogs'],
-        });
+        // UUID v4 format validation
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const isValidUUID = uuidRegex.test(id);
+        let toy = null;
+        // Try to find by UUID if valid format
+        if (isValidUUID) {
+            toy = await this.toyRepository.findOne({
+                where: { id },
+                relations: ['categories', 'images', 'cleaningLogs'],
+            });
+        }
+        // Fallback: try to find by slug
         if (!toy) {
-            throw new common_1.NotFoundException(`Toy with ID ${id} not found`);
+            toy = await this.toyRepository.findOne({
+                where: { slug: id },
+                relations: ['categories', 'images', 'cleaningLogs'],
+            });
+        }
+        if (!toy) {
+            throw new common_1.NotFoundException(`Toy with ID or slug "${id}" not found`);
         }
         return toy;
     }
@@ -121,6 +195,49 @@ let ToyService = class ToyService {
         const { categoryIds, images } = updateToyDto, toyData = __rest(updateToyDto, ["categoryIds", "images"]);
         // Update toy data
         Object.assign(toy, toyData);
+        // Keep availability in sync with stock updates
+        if (toyData.stockQuantity !== undefined) {
+            const newStock = Number(toyData.stockQuantity) || 0;
+            const currentStock = Number(toy.stockQuantity || 0);
+            const currentAvailable = Number(toy.availableQuantity || 0);
+            const stockDelta = newStock - currentStock;
+            toy.stockQuantity = newStock;
+            if (stockDelta > 0) {
+                // Increase available stock by the delta, capped to the new stock level
+                toy.availableQuantity = Math.min(newStock, currentAvailable + stockDelta);
+            }
+            else if (stockDelta < 0) {
+                // If stock is reduced, clamp available to the new stock level
+                toy.availableQuantity = Math.min(newStock, currentAvailable);
+            }
+            else {
+                // No stock change, ensure available is not greater than stock
+                toy.availableQuantity = Math.min(newStock, currentAvailable);
+            }
+            toy.availableQuantity = Math.max(0, toy.availableQuantity);
+            // Auto-update status based on stock if not explicitly provided
+            if (updateToyDto.status === undefined) {
+                if (newStock > 0) {
+                    toy.status = toy_entity_1.ToyStatus.AVAILABLE;
+                }
+                else {
+                    toy.status = toy_entity_1.ToyStatus.MAINTENANCE; // Or OUT_OF_STOCK if that exists, but MAINTENANCE seems to be the default 'unavailable' state here
+                }
+            }
+        }
+        // If availableQuantity is explicitly provided, honor it but cap to stock
+        if (toyData.availableQuantity !== undefined) {
+            const provided = Number(toyData.availableQuantity) || 0;
+            const cap = Number(toy.stockQuantity || toyData.stockQuantity || 0);
+            toy.availableQuantity = cap ? Math.min(provided, cap) : provided;
+            toy.availableQuantity = Math.max(0, toy.availableQuantity);
+        }
+        if (toyData.slug) {
+            toy.slug = await this.generateUniqueSlug(toyData.slug, toy.id);
+        }
+        else if (!toy.slug && toy.name) {
+            toy.slug = await this.generateUniqueSlug(toy.name, toy.id);
+        }
         // Update categories if provided
         if (categoryIds) {
             const categories = await this.categoryRepository.findBy({
@@ -130,6 +247,8 @@ let ToyService = class ToyService {
         }
         // Save updates
         await this.toyRepository.save(toy);
+        // Emit real-time stock update
+        this.emitStockUpdate(toy);
         // Update images if provided
         if (images) {
             // Remove old images
@@ -158,6 +277,8 @@ let ToyService = class ToyService {
             toy.lastCleaned = new Date();
         }
         await this.toyRepository.save(toy);
+        // Emit real-time stock update
+        this.emitStockUpdate(toy);
         return toy;
     }
     async getFeatured(limit = 10) {
@@ -198,6 +319,24 @@ let ToyService = class ToyService {
         }
         return updated;
     }
+    // Increment stock for all toys by 1
+    async incrementStockForAll() {
+        const toys = await this.toyRepository.find();
+        let updated = 0;
+        for (const toy of toys) {
+            const currentStock = Number(toy.stockQuantity || 0);
+            const currentAvailable = Number(toy.availableQuantity || 0);
+            toy.stockQuantity = currentStock + 1;
+            toy.availableQuantity = currentAvailable + 1;
+            // Ensure status is correct
+            if (toy.stockQuantity > 0 && toy.status === toy_entity_1.ToyStatus.MAINTENANCE) {
+                toy.status = toy_entity_1.ToyStatus.AVAILABLE;
+            }
+            await this.toyRepository.save(toy);
+            updated++;
+        }
+        return updated;
+    }
 };
 exports.ToyService = ToyService;
 exports.ToyService = ToyService = __decorate([
@@ -205,7 +344,9 @@ exports.ToyService = ToyService = __decorate([
     __param(0, (0, typeorm_1.InjectRepository)(toy_entity_1.Toy)),
     __param(1, (0, typeorm_1.InjectRepository)(toy_category_entity_1.ToyCategory)),
     __param(2, (0, typeorm_1.InjectRepository)(toy_image_entity_1.ToyImage)),
+    __param(3, (0, common_1.Optional)()),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
-        typeorm_2.Repository])
+        typeorm_2.Repository,
+        stock_gateway_1.StockGateway])
 ], ToyService);

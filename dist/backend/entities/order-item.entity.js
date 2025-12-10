@@ -41,6 +41,10 @@ __decorate([
     __metadata("design:type", Number)
 ], OrderItem.prototype, "rentalDurationDays", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'date', nullable: true }),
+    __metadata("design:type", Date)
+], OrderItem.prototype, "rentalStartDate", void 0);
+__decorate([
     (0, typeorm_1.Column)({
         type: 'enum',
         enum: toy_entity_1.ToyCondition,

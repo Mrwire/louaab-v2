@@ -85,6 +85,14 @@ let ToyController = class ToyController {
             message: `Caution mise à jour pour ${updated} jouet(s)`,
         };
     }
+    async incrementAllStock() {
+        const updated = await this.toyService.incrementStockForAll();
+        return {
+            success: true,
+            data: { updated },
+            message: `Stock incrémenté (+1) pour ${updated} jouet(s)`,
+        };
+    }
 };
 exports.ToyController = ToyController;
 __decorate([
@@ -97,6 +105,7 @@ __decorate([
 ], ToyController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)(),
+    (0, common_1.Header)('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate'),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [create_toy_dto_1.QueryToysDto]),
@@ -117,6 +126,7 @@ __decorate([
 ], ToyController.prototype, "getStats", null);
 __decorate([
     (0, common_1.Get)(':id'),
+    (0, common_1.Header)('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate'),
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -154,6 +164,12 @@ __decorate([
     __metadata("design:paramtypes", [Number, String]),
     __metadata("design:returntype", Promise)
 ], ToyController.prototype, "bulkUpdateDeposit", null);
+__decorate([
+    (0, common_1.Post)('increment-all-stock'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], ToyController.prototype, "incrementAllStock", null);
 exports.ToyController = ToyController = __decorate([
     (0, common_1.Controller)('toys'),
     __metadata("design:paramtypes", [toy_service_1.ToyService])

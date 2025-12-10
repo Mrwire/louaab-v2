@@ -31,7 +31,7 @@ export default function DesktopSearchModal({ isOpen, onClose }: DesktopSearchMod
     if (isOpen && inputRef.current) {
       setTimeout(() => {
         inputRef.current?.focus();
-      }, 100);
+      }, 300);
     }
   }, [isOpen]);
 
@@ -85,7 +85,7 @@ export default function DesktopSearchModal({ isOpen, onClose }: DesktopSearchMod
   return (
     <div className="fixed inset-0 z-[100] bg-white">
       {/* Modal */}
-      <div 
+      <div
         ref={modalRef}
         className="w-full h-full flex flex-col"
       >
@@ -111,7 +111,7 @@ export default function DesktopSearchModal({ isOpen, onClose }: DesktopSearchMod
                 <X className="h-5 w-5" />
               </button>
             </div>
-            
+
             {/* Barre de recherche */}
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 h-5 w-5" />
@@ -152,7 +152,7 @@ export default function DesktopSearchModal({ isOpen, onClose }: DesktopSearchMod
                   </button>
                 ))}
               </div>
-              
+
               <div className="mt-6 pt-6 border-t border-gray-100 text-center">
                 <div className="w-16 h-16 rounded-full bg-mint/10 flex items-center justify-center mx-auto mb-3">
                   <Search className="w-8 h-8 text-mint" />
@@ -172,7 +172,7 @@ export default function DesktopSearchModal({ isOpen, onClose }: DesktopSearchMod
                   {searchResults.length} résultat{searchResults.length > 1 ? 's' : ''} pour <span className="font-semibold text-charcoal">"{searchQuery}"</span>
                 </p>
               </div>
-              
+
               <div className="grid grid-cols-1 divide-y divide-gray-100">
                 {searchResults.map((toy) => (
                   <Link
@@ -207,7 +207,7 @@ export default function DesktopSearchModal({ isOpen, onClose }: DesktopSearchMod
                   </Link>
                 ))}
               </div>
-              
+
               {/* Footer avec bouton voir tous */}
               {searchResults.length >= 12 && (
                 <div className="p-4 text-center bg-white border-t border-gray-100">

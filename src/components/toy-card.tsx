@@ -16,7 +16,7 @@ export default function ToyCard({ toy, priority = false }: ToyCardProps) {
   };
 
   // Format price
-  const formatPrice = (price: string) => {
+  const formatPrice = (price?: string) => {
     if (!price) return 'Prix sur demande';
     return price;
   };
@@ -74,7 +74,7 @@ export default function ToyCard({ toy, priority = false }: ToyCardProps) {
               {toy.age}
             </span>
           )}
-          {toy.category && (
+          {toy.category && toy.category.toLowerCase() !== 'mois' && (
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 line-clamp-1">
               {toy.category.split(',')[0].trim()}
             </span>

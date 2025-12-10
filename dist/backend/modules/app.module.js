@@ -22,10 +22,12 @@ const faq_module_1 = require("./faq.module");
 const contact_module_1 = require("./contact.module");
 const sync_module_1 = require("./sync.module");
 const admin_ui_module_1 = require("./admin-ui.module");
+const upload_module_1 = require("./upload.module");
 const bootstrap_service_1 = require("../services/bootstrap.service");
 const age_range_entity_1 = require("../entities/age-range.entity");
 const toy_category_entity_1 = require("../entities/toy-category.entity");
 const pack_entity_1 = require("../entities/pack.entity");
+const stock_gateway_1 = require("../gateways/stock.gateway");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -41,17 +43,23 @@ exports.AppModule = AppModule = __decorate([
             typeorm_1.TypeOrmModule.forRootAsync({
                 imports: [config_1.ConfigModule],
                 inject: [config_1.ConfigService],
-                useFactory: (configService) => ({
-                    type: 'postgres',
-                    host: configService.get('DATABASE_HOST', 'localhost'),
-                    port: configService.get('DATABASE_PORT', 5432),
-                    username: configService.get('DATABASE_USER', 'postgres'),
-                    password: configService.get('DATABASE_PASSWORD', 'postgres'),
-                    database: configService.get('DATABASE_NAME', 'louaab'),
-                    entities: [__dirname + '/../entities/*.entity{.ts,.js}'],
-                    synchronize: configService.get('NODE_ENV') !== 'production',
-                    logging: configService.get('NODE_ENV') === 'development',
-                }),
+                useFactory: (configService) => {
+                    const syncSetting = configService.get('DATABASE_SYNCHRONIZE');
+                    const shouldSynchronize = typeof syncSetting === 'string'
+                        ? syncSetting.toLowerCase() === 'true'
+                        : configService.get('NODE_ENV') !== 'production';
+                    return {
+                        type: 'postgres',
+                        host: configService.get('DATABASE_HOST', 'localhost'),
+                        port: configService.get('DATABASE_PORT', 5432),
+                        username: configService.get('DATABASE_USER', 'postgres'),
+                        password: configService.get('DATABASE_PASSWORD', 'postgres'),
+                        database: configService.get('DATABASE_NAME', 'louaab'),
+                        entities: [__dirname + '/../entities/*.entity{.ts,.js}'],
+                        synchronize: shouldSynchronize,
+                        logging: configService.get('NODE_ENV') === 'development',
+                    };
+                },
             }),
             // Feature modules
             health_module_1.HealthModule,
@@ -66,8 +74,10 @@ exports.AppModule = AppModule = __decorate([
             contact_module_1.ContactModule,
             sync_module_1.SyncModule,
             admin_ui_module_1.AdminUiModule,
+            upload_module_1.UploadModule,
             typeorm_1.TypeOrmModule.forFeature([age_range_entity_1.AgeRange, toy_category_entity_1.ToyCategory, pack_entity_1.Pack]),
         ],
-        providers: [bootstrap_service_1.BootstrapService],
+        providers: [bootstrap_service_1.BootstrapService, stock_gateway_1.StockGateway],
+        exports: [stock_gateway_1.StockGateway],
     })
 ], AppModule);

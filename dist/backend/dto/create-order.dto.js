@@ -32,6 +32,11 @@ __decorate([
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateOrderItemDto.prototype, "rentalDurationDays", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsDateString)(),
+    __metadata("design:type", String)
+], CreateOrderItemDto.prototype, "rentalStartDate", void 0);
 class CreateOrderDto {
 }
 exports.CreateOrderDto = CreateOrderDto;
@@ -148,7 +153,7 @@ __decorate([
 ], QueryOrdersDto.prototype, "customerId", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(order_entity_1.OrderStatus),
+    (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], QueryOrdersDto.prototype, "status", void 0);
 __decorate([
@@ -167,11 +172,13 @@ __decorate([
     __metadata("design:type", String)
 ], QueryOrdersDto.prototype, "deliveryDateTo", void 0);
 __decorate([
+    (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], QueryOrdersDto.prototype, "page", void 0);
 __decorate([
+    (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)

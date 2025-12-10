@@ -39,11 +39,11 @@ __decorate([
     __metadata("design:type", String)
 ], AgeRange.prototype, "iconUrl", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ default: 0 }),
+    (0, typeorm_1.Column)({ default: 0, type: 'int' }),
     __metadata("design:type", Number)
 ], AgeRange.prototype, "ageMin", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ nullable: true }),
+    (0, typeorm_1.Column)({ nullable: true, type: 'int' }),
     __metadata("design:type", Object)
 ], AgeRange.prototype, "ageMax", void 0);
 __decorate([

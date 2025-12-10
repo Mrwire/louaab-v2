@@ -221,14 +221,7 @@ export default function JouetsClient({ initialToys }: JouetsClientProps) {
               nettoyés et prêts à louer
             </p>
 
-            <div className="mx-auto mt-8 max-w-2xl">
-              <SearchBar
-                toys={toys}
-                onSearchChange={setSearchQuery}
-                placeholder="Rechercher un jouet..."
-                className="w-full"
-              />
-            </div>
+
           </div>
         </div>
       </section>

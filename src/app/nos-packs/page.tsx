@@ -326,8 +326,8 @@ export default function NosPacksPage() {
                       setIsReservationModalOpen(true);
                     }}
                     className={`mt-8 w-full rounded-xl py-4 text-sm font-bold uppercase tracking-wide transition ${plan.badge
-                        ? "bg-gradient-to-r from-mint to-fresh-green text-charcoal shadow-lg shadow-mint/30 hover:shadow-xl hover:shadow-mint/40 hover:text-white"
-                        : "bg-charcoal text-white hover:bg-slate"
+                      ? "bg-gradient-to-r from-mint to-fresh-green text-charcoal shadow-lg shadow-mint/30 hover:shadow-xl hover:shadow-mint/40 hover:text-white"
+                      : "bg-charcoal text-white hover:bg-slate"
                       }`}
                   >
                     Choisir ce pack
@@ -339,16 +339,7 @@ export default function NosPacksPage() {
           </motion.div>
         )}
 
-        {/* Trust Message */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="mt-12 text-center text-sm text-slate"
-        >
-          🔒 Paiement sécurisé • ✅ Sans engagement • 🚚 Livraison gratuite
-          Casa & Rabat (à partir de 300 MAD)
-        </motion.div>
+
       </section>
 
       {/* Gift Offer */}
