@@ -478,7 +478,7 @@ export default function InventoryPage() {
       // Recherche stricte sur le nom uniquement (évite les conflits catégorie/description)
       const nameField = normalize(toy.name);
 
-      const matchesSearch = !normalizedQuery ? true : nameField === normalizedQuery;
+      const matchesSearch = !normalizedQuery ? true : nameField.includes(normalizedQuery);
 
       const categoryNormalized = normalize(toy.category);
       const matchesCategory =

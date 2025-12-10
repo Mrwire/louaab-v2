@@ -33,10 +33,10 @@ export default function ToyCard({ toy, priority = false }: ToyCardProps) {
           alt={toy.name}
           fill
           priority={priority}
-          className="object-cover group-hover:scale-105 transition-transform duration-300"
+          className="object-contain group-hover:scale-105 transition-transform duration-300"
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
         />
-        
+
         {/* Badge si nouveau ou populaire */}
         {!toy.hasImage && (
           <div className="absolute top-3 right-3 bg-blue-500 text-white text-xs font-semibold px-3 py-1 rounded-full">
@@ -88,11 +88,11 @@ export default function ToyCard({ toy, priority = false }: ToyCardProps) {
             {toy.promotion?.isActive ? (
               <div className="space-y-1">
                 <div className="text-lg font-bold text-green-600">
-                  {toy.promotion.type === 'percentage' 
+                  {toy.promotion.type === 'percentage'
                     ? `${toy.promotion.value}% de réduction`
                     : toy.promotion.type === 'fixed'
-                    ? `-${toy.promotion.value} MAD`
-                    : toy.promotion.value
+                      ? `-${toy.promotion.value} MAD`
+                      : toy.promotion.value
                   }
                 </div>
                 <div className="text-sm text-gray-500 line-through">
@@ -113,7 +113,7 @@ export default function ToyCard({ toy, priority = false }: ToyCardProps) {
               </div>
             )}
           </div>
-          
+
           {toy.rating && (
             <div className="text-right">
               <div className="text-xs text-gray-500">Note</div>

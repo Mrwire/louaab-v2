@@ -36,11 +36,10 @@ export function ProductCard({
     return (
       <button
         onClick={(e) => { e.stopPropagation(); toggleFavorite(keyId); }}
-        className={`flex h-11 w-11 items-center justify-center rounded-full shadow-sm transition-all duration-300 ${
-          isFav 
-            ? 'bg-red-500 text-white scale-110' 
+        className={`flex h-11 w-11 items-center justify-center rounded-full shadow-sm transition-all duration-300 ${isFav
+            ? 'bg-red-500 text-white scale-110'
             : 'bg-white text-charcoal hover:bg-red-500 hover:text-white'
-        }`}
+          }`}
         aria-label={isFav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
       >
         <Heart size={18} className={isFav ? 'fill-white' : ''} />
@@ -49,13 +48,13 @@ export function ProductCard({
   }
   return (
     <article className="group relative overflow-hidden rounded-[24px] bg-white shadow-sm shadow-mist/40 transition hover:-translate-y-1 hover:shadow-hover">
-      <div className="relative aspect-[4/5] overflow-hidden">
+      <div className="relative aspect-[4/5] overflow-hidden bg-gray-50">
         <Image
           src={imageUrl}
           alt={name}
           fill
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          className="object-cover transition duration-500 group-hover:scale-105"
+          className="object-contain transition duration-500 group-hover:scale-105"
         />
         {badge ? (
           <span className="absolute left-4 top-4 rounded-full bg-peach px-3 py-1 text-xs font-semibold uppercase tracking-wide text-charcoal">

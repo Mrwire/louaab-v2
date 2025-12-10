@@ -54,14 +54,14 @@ export default function ToyCardWithReservation({ toy, priority = false }: ToyCar
       className="group block cursor-pointer overflow-hidden rounded-2xl bg-white shadow-sm transition hover:shadow-xl"
     >
       {/* Image */}
-      <div className="relative aspect-square overflow-hidden">
+      <div className="relative aspect-square overflow-hidden bg-gray-50">
         <Image
           src={toy.image}
           alt={toy.name}
           fill
           priority={priority}
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          className="object-cover transition duration-500 group-hover:scale-105"
+          className="object-contain transition duration-500 group-hover:scale-105"
         />
 
         {/* Badge pour image manquante */}

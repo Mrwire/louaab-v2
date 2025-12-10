@@ -511,6 +511,18 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
+              {/* Validation error messages */}
+              {(!customerName || !customerPhone || !orderStartDate) && (
+                <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-200">
+                  <p className="text-sm font-medium text-red-700 mb-1">⚠️ Champs requis manquants :</p>
+                  <ul className="text-sm text-red-600 list-disc list-inside">
+                    {!customerName && <li>Nom complet</li>}
+                    {!customerPhone && <li>Téléphone</li>}
+                    {!orderStartDate && <li>Date de livraison</li>}
+                  </ul>
+                </div>
+              )}
+
               <button
                 onClick={handleSubmit}
                 disabled={isSubmitting || !customerName || !customerPhone || !orderStartDate}
