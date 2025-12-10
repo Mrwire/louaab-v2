@@ -59,6 +59,7 @@ export default function JouetsClient({ initialToys }: JouetsClientProps) {
   const [toys, setToys] = useState<ToyData[]>(initialToys ?? []);
   const [loading, setLoading] = useState(!initialToys?.length);
   const [showSearchBar, setShowSearchBar] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(12); // Lazy loading: show 12 toys initially
 
   const handleToggleFavorite = (e: React.MouseEvent, toyId: string) => {
     e.preventDefault();
@@ -144,6 +145,11 @@ export default function JouetsClient({ initialToys }: JouetsClientProps) {
     }
   }, [computedMaxPrice, priceRangeLocked]);
 
+  // Reset visible count when filters change
+  useEffect(() => {
+    setVisibleCount(12);
+  }, [selectedCategory, selectedAge, searchQuery, sortBy]);
+
   const filteredToys = toys.filter((toy) => {
     const matchesCategory =
       selectedCategory === "Tous" || toy.category?.includes(selectedCategory);
@@ -196,6 +202,11 @@ export default function JouetsClient({ initialToys }: JouetsClientProps) {
     }
   });
 
+  // Lazy loading: only display visibleCount toys
+  const displayedToys = sortedToys.slice(0, visibleCount);
+  const hasMoreToys = visibleCount < sortedToys.length;
+  const handleLoadMore = () => setVisibleCount(prev => prev + 12);
+
   return (
     <PageShell>
       {/* Hero Header */}
@@ -229,8 +240,8 @@ export default function JouetsClient({ initialToys }: JouetsClientProps) {
               key={category}
               onClick={() => setSelectedCategory(category)}
               className={`rounded-full px-6 py-3 text-sm font-semibold transition ${selectedCategory === category
-                  ? "bg-mint text-white shadow-lg shadow-mint/30"
-                  : "bg-white text-slate hover:bg-mint/10"
+                ? "bg-mint text-white shadow-lg shadow-mint/30"
+                : "bg-white text-slate hover:bg-mint/10"
                 }`}
             >
               {category}
@@ -339,8 +350,8 @@ export default function JouetsClient({ initialToys }: JouetsClientProps) {
                   <button
                     onClick={() => setViewMode("grid")}
                     className={`rounded-l-xl px-3 py-2 transition ${viewMode === "grid"
-                        ? "bg-mint text-white"
-                        : "text-slate hover:bg-mist"
+                      ? "bg-mint text-white"
+                      : "text-slate hover:bg-mist"
                       }`}
                   >
                     <Grid3x3 size={18} />
@@ -348,8 +359,8 @@ export default function JouetsClient({ initialToys }: JouetsClientProps) {
                   <button
                     onClick={() => setViewMode("list")}
                     className={`rounded-r-xl px-3 py-2 transition ${viewMode === "list"
-                        ? "bg-mint text-white"
-                        : "text-slate hover:bg-mist"
+                      ? "bg-mint text-white"
+                      : "text-slate hover:bg-mist"
                       }`}
                   >
                     <List size={18} />
@@ -386,11 +397,11 @@ export default function JouetsClient({ initialToys }: JouetsClientProps) {
                   </div>
                 </div>
               ) : viewMode === "grid" ? (
-                sortedToys.map((toy) => (
+                displayedToys.map((toy) => (
                   <ToyCardWithReservation key={toy.backendId ?? toy.id} toy={toy} />
                 ))
               ) : (
-                sortedToys.map((toy) => {
+                displayedToys.map((toy) => {
                   const toyKey = String(toy.backendId ?? toy.id);
                   return (
                     <div
@@ -421,8 +432,8 @@ export default function JouetsClient({ initialToys }: JouetsClientProps) {
                             <button
                               onClick={(e) => handleToggleFavorite(e, toyKey)}
                               className={`flex-shrink-0 transition-all duration-300 ${isFavorite(toyKey)
-                                  ? "text-red-500 scale-110"
-                                  : "text-slate/40 hover:text-red-500 hover:scale-110"
+                                ? "text-red-500 scale-110"
+                                : "text-slate/40 hover:text-red-500 hover:scale-110"
                                 }`}
                               title={
                                 isFavorite(toyKey)
@@ -501,6 +512,21 @@ export default function JouetsClient({ initialToys }: JouetsClientProps) {
                 })
               )}
             </div>
+
+            {/* Load More Button */}
+            {hasMoreToys && (
+              <div className="mt-8 flex flex-col items-center gap-2">
+                <p className="text-sm text-slate">
+                  Affichage de {displayedToys.length} sur {sortedToys.length} jouets
+                </p>
+                <button
+                  onClick={handleLoadMore}
+                  className="rounded-xl bg-mint px-8 py-3 font-semibold text-white transition hover:bg-mint/90 hover:shadow-lg"
+                >
+                  Voir plus de jouets
+                </button>
+              </div>
+            )}
 
             {filteredToys.length === 0 && (
               <div className="rounded-2xl bg-white p-12 text-center shadow-sm">
