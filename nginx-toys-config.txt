@@ -1,0 +1,9 @@
+# Add this location block inside the server block for louaab.ma (port 443)
+# BEFORE the general proxy_pass location /
+
+location /toys/ {
+    alias /root/louaab-project/public/toys/;
+    expires 30d;
+    add_header Cache-Control "public, immutable";
+    try_files $uri $uri/ =404;
+}

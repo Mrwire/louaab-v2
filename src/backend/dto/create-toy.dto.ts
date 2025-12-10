@@ -138,7 +138,7 @@ export class CreateToyDto {
 }
 
 // Make all fields optional for PATCH operations
-export class UpdateToyDto extends PartialType(CreateToyDto) {}
+export class UpdateToyDto extends PartialType(CreateToyDto) { }
 
 export class QueryToysDto {
   @IsOptional()
@@ -176,7 +176,7 @@ export class QueryToysDto {
   @IsOptional()
   @IsNumber()
   @Min(1)
-  @Max(500)
+  @Max(1000)
   @Type(() => Number)
   limit?: number = 500;
 

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Calendar, Clock, Plus, Minus, ShoppingCart, TrendingUp, X, Check } from "lucide-react";
 import { useCart } from "@/contexts/cart-context";
-import { ToyData } from "@/lib/toys-data";
+import { ToyData, getToyBySlug } from "@/lib/toys-data";
 import { formatDateInput } from "@/lib/date";
 import PricingSelector, { PricingOption } from "./pricing-selector";
 import DatePicker from "./date-picker";
@@ -17,13 +17,54 @@ interface ToyDetailClientProps {
 
 
 
-export default function ToyDetailClient({ toy }: ToyDetailClientProps) {
+export default function ToyDetailClient({ toy: initialToy }: ToyDetailClientProps) {
   const { items, addToCart, removeFromCart, updateQuantity } = useCart();
+  const [liveToy, setLiveToy] = useState<ToyData | null>(initialToy);
+  const toy = liveToy ?? initialToy;
   const [selectedPricingType, setSelectedPricingType] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
   const [startDate, setStartDate] = useState(formatDateInput());
 
   const [quantity, setQuantity] = useState(1);
   const [isAdding, setIsAdding] = useState(false);
+
+  // Keep toy data in sync with backend (live refresh)
+  useEffect(() => {
+    setLiveToy(initialToy);
+  }, [initialToy]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchLatest = async () => {
+      try {
+        const fresh = await getToyBySlug(initialToy.slug, { noCache: true, revalidateSeconds: 0 });
+        if (!cancelled && fresh) {
+          setLiveToy(fresh);
+          console.debug("Live toy refresh:", fresh.slug, fresh.stockQuantity, fresh.price);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.warn("Impossible de rafraîchir le jouet:", err);
+        }
+      }
+    };
+
+    fetchLatest();
+    const interval = setInterval(fetchLatest, 5000);
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchLatest();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [initialToy.slug]);
 
   const toyKey = toy.backendId ?? String(toy.id);
   const cartItemByDuration = items.find(item => item.id === `${toyKey}-${selectedPricingType}`);
@@ -34,10 +75,9 @@ export default function ToyDetailClient({ toy }: ToyDetailClientProps) {
   const availableStock = Math.max(
     0,
     Number(
-      toy.stockQuantity ??
-        toy.availableQuantity ??
-        toy.stock ??
-        (cartItem?.toy?.stockQuantity ?? cartItem?.toy?.stock)
+      toy.availableQuantity !== undefined
+        ? toy.availableQuantity
+        : (toy.stockQuantity ?? toy.stock ?? (cartItem?.toy?.stockQuantity ?? cartItem?.toy?.stock))
     ) || 0
   );
 
@@ -95,12 +135,12 @@ export default function ToyDetailClient({ toy }: ToyDetailClientProps) {
   const dailyPrice = toy.rentalPriceDaily || parseFloat(toy.price?.replace(/[^\d.]/g, '') || '25');
   const weeklyPrice = toy.rentalPriceWeekly || (dailyPrice * 4.8);
   const monthlyPrice = toy.rentalPriceMonthly || (dailyPrice * 15);
-  
+
   // Calculer les prix originaux et réductions si nécessaire
   const weeklyOriginalPrice = dailyPrice * 7;
   const weeklyDiscount = weeklyOriginalPrice - weeklyPrice;
   const weeklyDiscountPercentage = Math.round((weeklyDiscount / weeklyOriginalPrice) * 100);
-  
+
   const monthlyOriginalPrice = dailyPrice * 30;
   const monthlyDiscount = monthlyOriginalPrice - monthlyPrice;
   const monthlyDiscountPercentage = Math.round((monthlyDiscount / monthlyOriginalPrice) * 100);
@@ -147,9 +187,9 @@ export default function ToyDetailClient({ toy }: ToyDetailClientProps) {
   const calculatePrice = () => {
     const selectedOption = pricingOptions.find(opt => opt.type === selectedPricingType);
     if (!selectedOption) return 0;
-    
+
     let totalPrice = selectedOption.price * quantity;
-    
+
     // Appliquer la promotion si active
     if (toy.promotion?.isActive) {
       if (toy.promotion.type === 'percentage') {
@@ -159,7 +199,7 @@ export default function ToyDetailClient({ toy }: ToyDetailClientProps) {
         totalPrice = totalPrice - parseFloat(toy.promotion.value);
       }
     }
-    
+
     return Math.max(0, totalPrice);
   };
 
@@ -172,14 +212,14 @@ export default function ToyDetailClient({ toy }: ToyDetailClientProps) {
   const handleAddToCart = async () => {
     if (availableStock <= 0) return;
     setIsAdding(true);
-    
+
     // Ajouter au panier avec les paramètres sélectionnés
     addToCart(toy, selectedPricingType, startDate, quantity);
-    
+
     // Effet confetti
     const confettiColors = ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0'];
     const confettiCount = 50;
-    
+
     for (let i = 0; i < confettiCount; i++) {
       setTimeout(() => {
         const confetti = document.createElement('div');
@@ -193,20 +233,20 @@ export default function ToyDetailClient({ toy }: ToyDetailClientProps) {
         confetti.style.zIndex = '9999';
         confetti.style.transition = 'all 2s ease-out';
         document.body.appendChild(confetti);
-        
+
         setTimeout(() => {
           confetti.style.top = `${window.innerHeight + 50}px`;
           confetti.style.left = `${parseInt(confetti.style.left) + (Math.random() - 0.5) * 200}px`;
           confetti.style.opacity = '0';
           confetti.style.transform = `rotate(${Math.random() * 360}deg)`;
         }, 10);
-        
+
         setTimeout(() => {
           confetti.remove();
         }, 2000);
       }, i * 30);
     }
-    
+
     // Animation de confirmation
     setTimeout(() => setIsAdding(false), 1000);
   };
@@ -240,7 +280,7 @@ export default function ToyDetailClient({ toy }: ToyDetailClientProps) {
         <h3 className="text-lg font-semibold text-charcoal mb-4">
           Configurez votre location
         </h3>
-        
+
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 
           {/* Date */}

@@ -340,7 +340,7 @@ export default function InventoryPage() {
     }
   };
 
-const loadInventory = async () => {
+  const loadInventory = async () => {
     try {
       setLoading(true);
       // Essayer de charger depuis le backend d'abord
@@ -716,7 +716,7 @@ const loadInventory = async () => {
       'Autres'
     ];
 
-const parseAgeLabelToRange = (label?: string) => {
+  const parseAgeLabelToRange = (label?: string) => {
     if (!label) return null;
     const normalized = label.toLowerCase().trim();
 
@@ -804,7 +804,7 @@ const parseAgeLabelToRange = (label?: string) => {
   };
 
 
-  const handleAddToy = () => {
+  const handleAddToy = async () => {
     if (!newToy.name) {
       showNotification('Veuillez remplir au moins le nom du jouet', 'error');
       return;
@@ -836,6 +836,41 @@ const parseAgeLabelToRange = (label?: string) => {
       isEditing: false,
       hasChanges: false
     };
+
+    // POST to backend to persist the toy and get the backendId
+    try {
+      const response = await fetch(`${API_BASE_URL}/toys`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: toyToAdd.name,
+          slug: toyToAdd.slug,
+          description: toyToAdd.description || '',
+          isActive: true,
+          isFeatured: false,
+          stockQuantity: 1,
+          availableQuantity: 1,
+          images: toyToAdd.image && toyToAdd.image !== '/toys/placeholders/toy-placeholder.svg'
+            ? [{ url: toyToAdd.image, isPrimary: true }]
+            : [],
+          videoUrl: newToy.hasVideo ? newToy.videoUrl : null,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Échec création jouet sur le serveur');
+      }
+
+      const createdToy = await response.json();
+      toyToAdd.backendId = createdToy.id;
+      console.log('[handleAddToy] Jouet créé avec backendId:', createdToy.id);
+
+    } catch (error) {
+      console.error('[handleAddToy] Erreur création:', error);
+      showNotification('Erreur création jouet: ' + (error as Error).message, 'error');
+      return;
+    }
 
     setToys(prev => [toyToAdd, ...prev]);
     if (highlightTimeoutRef.current) {
@@ -1056,7 +1091,7 @@ const parseAgeLabelToRange = (label?: string) => {
     }
   };
 
-// Fonction pour exporter les produits en CSV
+  // Fonction pour exporter les produits en CSV
   const handleExportCSV = async () => {
     try {
       setExporting(true);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { CheckCircle, XCircle, AlertCircle, Info, X } from "lucide-react";
 
 export interface Notification {
@@ -22,7 +22,7 @@ export function NotificationToast({ notification, onRemove }: NotificationToastP
   useEffect(() => {
     // Animation d'entrée
     const timer = setTimeout(() => setIsVisible(true), 100);
-    
+
     // Auto-remove après la durée spécifiée
     const autoRemoveTimer = setTimeout(() => {
       handleRemove();
@@ -71,11 +71,10 @@ export function NotificationToast({ notification, onRemove }: NotificationToastP
 
   return (
     <div
-      className={`fixed top-4 right-4 z-50 max-w-sm w-full transform transition-all duration-300 ${
-        isVisible 
-          ? 'translate-x-0 opacity-100' 
-          : 'translate-x-full opacity-0'
-      }`}
+      className={`fixed top-4 right-4 z-50 max-w-sm w-full transform transition-all duration-300 ${isVisible
+        ? 'translate-x-0 opacity-100'
+        : 'translate-x-full opacity-0'
+        }`}
     >
       <div className={`rounded-lg border p-4 shadow-lg ${getBgColor()}`}>
         <div className="flex items-start gap-3">
@@ -106,35 +105,35 @@ export function NotificationToast({ notification, onRemove }: NotificationToastP
 export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  const addNotification = (notification: Omit<Notification, 'id'>) => {
+  const addNotification = useCallback((notification: Omit<Notification, 'id'>) => {
     const id = `notification-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const newNotification: Notification = {
       id,
       ...notification,
     };
-    
+
     setNotifications(prev => [...prev, newNotification]);
-  };
+  }, []);
 
-  const removeNotification = (id: string) => {
+  const removeNotification = useCallback((id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
-  };
+  }, []);
 
-  const showSuccess = (title: string, message: string, duration?: number) => {
+  const showSuccess = useCallback((title: string, message: string, duration?: number) => {
     addNotification({ type: 'success', title, message, duration });
-  };
+  }, [addNotification]);
 
-  const showError = (title: string, message: string, duration?: number) => {
+  const showError = useCallback((title: string, message: string, duration?: number) => {
     addNotification({ type: 'error', title, message, duration });
-  };
+  }, [addNotification]);
 
-  const showWarning = (title: string, message: string, duration?: number) => {
+  const showWarning = useCallback((title: string, message: string, duration?: number) => {
     addNotification({ type: 'warning', title, message, duration });
-  };
+  }, [addNotification]);
 
-  const showInfo = (title: string, message: string, duration?: number) => {
+  const showInfo = useCallback((title: string, message: string, duration?: number) => {
     addNotification({ type: 'info', title, message, duration });
-  };
+  }, [addNotification]);
 
   return {
     notifications,

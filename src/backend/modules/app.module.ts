@@ -13,10 +13,12 @@ import { FAQModule } from './faq.module';
 import { ContactModule } from './contact.module';
 import { SyncModule } from './sync.module';
 import { AdminUiModule } from './admin-ui.module';
+import { UploadModule } from './upload.module';
 import { BootstrapService } from '../services/bootstrap.service';
 import { AgeRange } from '../entities/age-range.entity';
 import { ToyCategory } from '../entities/toy-category.entity';
 import { Pack } from '../entities/pack.entity';
+import { StockGateway } from '../gateways/stock.gateway';
 
 @Module({
   imports: [
@@ -64,8 +66,11 @@ import { Pack } from '../entities/pack.entity';
     ContactModule,
     SyncModule,
     AdminUiModule,
+    UploadModule,
     TypeOrmModule.forFeature([AgeRange, ToyCategory, Pack]),
   ],
-  providers: [BootstrapService],
+  providers: [BootstrapService, StockGateway],
+  exports: [StockGateway],
 })
-export class AppModule {}
+export class AppModule { }
+

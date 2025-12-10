@@ -17,6 +17,7 @@ export interface Order {
   deliveryAddress?: string;
   items: OrderItem[];
   totalPrice: number;
+  depositAmount?: number;
   status: 'pending' | 'confirmed' | 'delivered' | 'returned' | 'completed' | 'cancelled';
   createdAt: string;
   notes?: string;
@@ -210,7 +211,7 @@ export class OrderManager {
   // Initialiser avec des données d'exemple si aucune donnée n'existe
   static initializeSampleData(): void {
     if (typeof window === 'undefined') return;
-    
+
     const existingOrders = this.getAllOrders();
     if (existingOrders.length === 0) {
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(sampleOrders));
@@ -235,7 +236,7 @@ export class OrderManager {
 
   static updateOrderStatus(orderId: string, status: Order['status']): void {
     const orders = this.getAllOrders();
-    const updatedOrders = orders.map(order => 
+    const updatedOrders = orders.map(order =>
       order.id === orderId ? { ...order, status } : order
     );
     localStorage.setItem(this.STORAGE_KEY, JSON.stringify(updatedOrders));

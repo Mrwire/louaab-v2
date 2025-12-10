@@ -53,30 +53,30 @@ const navItems = [
 ];
 
 const packSubItems = [
-  { 
-    icon: Edit, 
-    label: "Gérer les Packs", 
+  {
+    icon: Edit,
+    label: "Gérer les Packs",
     href: "/admin/packs",
     description: "Modifier les packs et leurs prix"
   },
-  { 
-    icon: Calendar, 
-    label: "Réservations", 
+  {
+    icon: Calendar,
+    label: "Réservations",
     href: "/admin/pack-reservations",
     description: "Gérer les réservations de packs"
   },
 ];
 
 const contentSubItems = [
-  { 
-    icon: Baby, 
-    label: "Tranches d'âge", 
+  {
+    icon: Baby,
+    label: "Tranches d'âge",
     href: "/admin/ages",
     description: "Gérer les tranches d'âge"
   },
-  { 
-    icon: Tags, 
-    label: "Catégories", 
+  {
+    icon: Tags,
+    label: "Catégories",
     href: "/admin/categories",
     description: "Gérer les catégories de jouets"
   },
@@ -89,7 +89,7 @@ export default function AdminLayout({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
   const [notifications, setNotifications] = useState<QuickNotification[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
@@ -124,7 +124,7 @@ export default function AdminLayout({
         audioRef.current = new Audio(pingSound);
       }
       audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(() => {});
+      audioRef.current.play().catch(() => { });
     } catch (error) {
       console.warn("Impossible de jouer le son:", error);
     }
@@ -288,17 +288,7 @@ export default function AdminLayout({
     });
   };
 
-  // Afficher le loader pendant la vérification
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-mint mx-auto"></div>
-          <p className="mt-4 text-slate">Vérification de l&apos;authentification...</p>
-        </div>
-      </div>
-    );
-  }
+  // Auth loading screen removed - layout renders immediately
 
   // Si pas authentifié, ne pas afficher le layout
   if (!isAuthenticated && pathname !== '/admin/login') {
@@ -314,9 +304,8 @@ export default function AdminLayout({
     <div className="flex h-screen bg-mist/20">
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-white shadow-xl transition-transform duration-300 lg:relative lg:translate-x-0 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-white shadow-xl transition-transform duration-300 lg:relative lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         <div className="flex h-full flex-col">
           {/* Logo */}
@@ -351,11 +340,10 @@ export default function AdminLayout({
                   <li key={item.href}>
                     <Link
                       href={item.href}
-                      className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition ${
-                        isActive
+                      className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition ${isActive
                           ? "bg-[#1897aa] text-white shadow-lg shadow-[#1897aa]/30"
                           : "text-slate hover:bg-[#1897aa]/10 hover:text-charcoal"
-                      }`}
+                        }`}
                       onClick={() => setSidebarOpen(false)}
                     >
                       <Icon size={20} />
@@ -399,7 +387,7 @@ export default function AdminLayout({
                 <p className="text-sm font-semibold text-charcoal">Sara</p>
                 <p className="text-xs text-slate">Admin</p>
               </div>
-              <button 
+              <button
                 onClick={handleLogout}
                 className="text-slate hover:text-coral transition-colors"
                 title="Se déconnecter"
@@ -527,7 +515,7 @@ export default function AdminLayout({
           onClick={() => setSidebarOpen(false)}
         />
       )}
-      
+
       {/* Container pour les notifications */}
       <NotificationContainer />
     </div>

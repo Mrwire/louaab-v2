@@ -11,6 +11,16 @@ export default function HeaderSearch() {
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [toys, setToys] = useState<ToyData[]>([]);
   const searchRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus input when component mounts
+  useEffect(() => {
+    // Small delay to ensure DOM is ready
+    const timer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Charger les jouets depuis le backend si disponible
   useEffect(() => {
@@ -44,7 +54,7 @@ export default function HeaderSearch() {
       // Score de pertinence
       if (toyName.startsWith(query)) score += 10; // Commence par la recherche = très pertinent
       else if (toyName.includes(query)) score += 5; // Contient la recherche = pertinent
-      
+
       if (toyCategory.includes(query)) score += 3;
       if (toyAge.includes(query)) score += 2;
       if (toyDesc.includes(query)) score += 1;
@@ -83,6 +93,7 @@ export default function HeaderSearch() {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
         <input
+          ref={inputRef}
           type="text"
           placeholder="Rechercher un jouet..."
           value={searchQuery}
@@ -146,7 +157,7 @@ export default function HeaderSearch() {
               </Link>
             ))}
           </div>
-          
+
           {/* Voir tous les résultats */}
           {searchResults.length >= 8 && (
             <div className="border-t border-gray-200 p-2">

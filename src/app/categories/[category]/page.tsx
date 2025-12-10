@@ -1,9 +1,12 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import Image from "next/image";
 import { PageShell } from "@/components/page-shell";
 import { SectionHeading } from "@/components/section-heading";
 import CategoryToysView from "@/components/category-toys-view";
 import { getToysByCategory } from "@/lib/toys-data";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://louaab.ma/api";
 
@@ -20,7 +23,7 @@ interface CategoryEntity {
 }
 
 const FALLBACK_CATEGORIES: CategoryEntity[] = [
-  { id: "1", name: "Jeux éducatifs", slug: "jeux-educatifs", iconType: "emoji", icon: "🧠", displayOrder: 0, isActive: true },
+  { id: "1", name: "Jeux éducatifs", slug: "jeux-educatifs", iconType: "emoji", icon: "🎯", displayOrder: 0, isActive: true },
   { id: "2", name: "Jeux de société", slug: "jeux-de-societe", iconType: "emoji", icon: "🎲", displayOrder: 1, isActive: true },
   { id: "3", name: "Jeux d'adresse", slug: "jeux-adresse", iconType: "emoji", icon: "🏹", displayOrder: 2, isActive: true },
 ];
@@ -35,7 +38,7 @@ const normalizeToSlug = (value: string) =>
 
 async function fetchCategories(): Promise<CategoryEntity[]> {
   try {
-    const response = await fetch(`${API_BASE_URL}/categories`, { next: { revalidate: 120 } });
+    const response = await fetch(`${API_BASE_URL}/categories`, { cache: "no-store" });
     const body = await response.json().catch(() => ({}));
     if (response.ok && Array.isArray(body?.data)) {
       return body.data as CategoryEntity[];
@@ -44,13 +47,6 @@ async function fetchCategories(): Promise<CategoryEntity[]> {
     console.warn("Impossible de charger les catégories:", error);
   }
   return FALLBACK_CATEGORIES;
-}
-
-export async function generateStaticParams() {
-  const categories = await fetchCategories();
-  return categories.map((category) => ({
-    category: category.slug || normalizeToSlug(category.name),
-  }));
 }
 
 export async function generateMetadata({ params }: { params: { category: string } }) {
@@ -68,29 +64,29 @@ export async function generateMetadata({ params }: { params: { category: string 
 
 const getCategoryEmoji = (name: string): string => {
   const nameLower = name.toLowerCase();
-  if (nameLower.includes("éducatif")) return "🧠";
+  if (nameLower.includes("éducatif")) return "🎯";
   if (nameLower.includes("société")) return "🎲";
   if (nameLower.includes("bois")) return "🪵";
   if (nameLower.includes("puzzle")) return "🧩";
-  if (nameLower.includes("construction")) return "🚧";
+  if (nameLower.includes("construction")) return "🏗️";
   if (nameLower.includes("véhicule") || nameLower.includes("voiture") || nameLower.includes("train")) return "🚗";
   if (nameLower.includes("créatif")) return "🎨";
   if (nameLower.includes("extérieur")) return "🌳";
   if (nameLower.includes("adresse")) return "🏹";
-  if (nameLower.includes("arcade")) return "👾";
+  if (nameLower.includes("arcade")) return "🕹️";
   if (nameLower.includes("artistique")) return "🎭";
   if (nameLower.includes("avion") || nameLower.includes("hélico") || nameLower.includes("drone")) return "✈️";
-  if (nameLower.includes("cuisine") || nameLower.includes("dinette")) return "🍽️";
+  if (nameLower.includes("cuisine") || nameLower.includes("dinette")) return "🍳";
   if (nameLower.includes("déguisement")) return "🎭";
-  if (nameLower.includes("instrument") || nameLower.includes("musique")) return "🎵";
+  if (nameLower.includes("instrument") || nameLower.includes("musique")) return "🎸";
   if (nameLower.includes("ordinateur") || nameLower.includes("tablette")) return "💻";
-  if (nameLower.includes("poupée")) return "🪆";
+  if (nameLower.includes("poupée")) return "🩷";
   if (nameLower.includes("sport")) return "🏀";
-  if (nameLower.includes("stem") || nameLower.includes("science")) return "🔬";
+  if (nameLower.includes("stem") || nameLower.includes("science")) return "🧪";
   if (nameLower.includes("robot")) return "🤖";
   if (nameLower.includes("super") || nameLower.includes("héros")) return "🦸";
   if (nameLower.includes("tir")) return "🎯";
-  return "🧸";
+  return "🎁";
 };
 
 export default async function CategoryPage({ params }: { params: { category: string } }) {
@@ -110,18 +106,12 @@ export default async function CategoryPage({ params }: { params: { category: str
     <PageShell>
       <section className="border-b border-mist/60 bg-gradient-to-br from-mint/5 to-blue-50 py-16">
         <div className="mx-auto w-full max-w-6xl px-4">
-          <nav className="flex items-center gap-2 text-sm text-slate mb-4">
-            <Link href="/" className="hover:text-mint">
-              Accueil
-            </Link>
+          <nav className="mb-4 flex items-center gap-2 text-sm text-slate">
+            <Link href="/" className="hover:text-mint">Accueil</Link>
             <span>/</span>
-            <Link href="/jouets" className="hover:text-mint">
-              Jouets
-            </Link>
+            <Link href="/jouets" className="hover:text-mint">Jouets</Link>
             <span>/</span>
-            <Link href="/categories" className="hover:text-mint">
-              Catégories
-            </Link>
+            <Link href="/categories" className="hover:text-mint">Catégories</Link>
             <span>/</span>
             <span className="text-charcoal capitalize">{categoryName}</span>
           </nav>
@@ -162,7 +152,7 @@ export default async function CategoryPage({ params }: { params: { category: str
               <CategoryToysView toys={toys} />
             ) : (
               <div className="flex flex-col items-center justify-center rounded-3xl bg-gray-50 py-20">
-                <div className="text-6xl">🧸</div>
+                <div className="text-6xl">😔</div>
                 <h3 className="mt-4 text-xl font-bold text-gray-900">Aucun jouet dans cette catégorie</h3>
                 <p className="mt-2 text-gray-600">Essayez une autre catégorie</p>
                 <Link

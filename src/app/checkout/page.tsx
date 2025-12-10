@@ -34,7 +34,21 @@ const getUnitPrice = (item: ReturnType<typeof useCart>["items"][number]) => {
 };
 
 export default function CheckoutPage() {
-  const { items, removeFromCart, updateQuantity, getTotalPrice, clearCart, updateItem } = useCart();
+  const {
+    items,
+    removeFromCart,
+    updateQuantity,
+    getTotalPrice,
+    getTotalDeposit,
+    getDeliveryFee,
+    getGrandTotal,
+    clearCart,
+    updateItem,
+    orderDuration,
+    orderStartDate,
+    setOrderDuration,
+    setOrderStartDate
+  } = useCart();
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
@@ -131,14 +145,14 @@ export default function CheckoutPage() {
       };
 
       const createdOrder = await createPublicOrder(payload);
-      
+
       // Vider le panier
       clearCart();
-      
+
       // Afficher la confirmation
       setOrderId(createdOrder?.orderNumber || createdOrder?.id || null);
       setOrderSubmitted(true);
-      
+
     } catch (error) {
       console.error("Erreur lors de la création de la commande:", error);
       setSubmissionError(error instanceof Error ? error.message : "Une erreur est survenue. Veuillez réessayer.");
@@ -286,68 +300,6 @@ export default function CheckoutPage() {
                         {item.toy.category}
                       </p>
 
-                      {/* Configuration */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        {/* Durée */}
-                        <div>
-                          <label className="block text-xs font-medium text-slate mb-1">
-                             Durée
-                          </label>
-                          <select
-                            value={item.duration}
-                            onChange={(e) => handleUpdateItem(item.id, 'duration', e.target.value)}
-                            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                          >
-                            {durations.map((duration) => (
-                              <option key={duration.value} value={duration.value}>
-                                {duration.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Date */}
-                        <div>
-                          <DatePicker
-                            value={item.startDate}
-                            onChange={(date) => handleUpdateItem(item.id, 'startDate', date)}
-                            label="Date"
-                            min={formatDateInput()}
-                            required
-                            className="text-xs"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Quantité et prix */}
-                      <div className="flex items-center justify-between mt-4">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                            className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200"
-                          >
-                            -
-                          </button>
-                          <span className="w-8 text-center font-medium">
-                            {item.quantity}
-                          </span>
-                          <button
-                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                            className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200"
-                          >
-                            +
-                          </button>
-                        </div>
-
-                        <div className="text-right">
-                          <div className="text-lg font-bold text-mint">
-                            {itemTotal.toFixed(0)} MAD
-                          </div>
-                          <div className="text-xs text-slate">
-                            {durationLabel}
-                          </div>
-                        </div>
-                      </div>
                     </div>
 
                     {/* Bouton supprimer */}
@@ -357,6 +309,36 @@ export default function CheckoutPage() {
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
+                  </div>
+
+                  {/* Quantité et prix */}
+                  <div className="flex items-center justify-between mt-4">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      >
+                        -
+                      </button>
+                      <span className="w-8 text-center font-medium">
+                        {item.quantity}
+                      </span>
+                      <button
+                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-lg font-bold text-mint">
+                        {itemTotal.toFixed(0)} MAD
+                      </div>
+                      <div className="text-xs text-slate">
+                        {durationLabel}
+                      </div>
+                    </div>
                   </div>
                 </div>
               );
@@ -453,6 +435,44 @@ export default function CheckoutPage() {
               </div>
             </div>
 
+            {/* Global Duration Selector */}
+            <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+              <h3 className="text-lg font-semibold text-charcoal mb-4">
+                ⏱️ Durée de location
+              </h3>
+              <p className="text-sm text-slate mb-4">
+                Choisissez une durée unique pour tous vos jouets
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { value: 'weekly', label: '1 semaine' },
+                  { value: 'biweekly', label: '2 semaines' },
+                  { value: 'monthly', label: '1 mois' },
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setOrderDuration(option.value as any)}
+                    className={`rounded-xl px-4 py-3 text-sm font-medium transition ${orderDuration === option.value
+                      ? 'bg-mint text-white shadow-md'
+                      : 'bg-gray-100 text-charcoal hover:bg-gray-200'
+                      }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-4">
+                <DatePicker
+                  value={orderStartDate}
+                  onChange={setOrderStartDate}
+                  label="Date de début"
+                  min={formatDateInput()}
+                  required
+                />
+              </div>
+            </div>
+
             {/* Résumé de commande */}
             <div className="rounded-2xl bg-gradient-to-r from-mint/10 to-purple-500/10 p-6">
               <h3 className="text-lg font-semibold text-charcoal mb-4">
@@ -463,17 +483,37 @@ export default function CheckoutPage() {
                   <span className="text-slate">Articles ({items.length})</span>
                   <span className="font-medium">{getTotalPrice().toFixed(0)} MAD</span>
                 </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate">Caution (remboursable)</span>
+                  <span className="font-medium">{getTotalDeposit().toFixed(0)} MAD</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate">Livraison</span>
+                  {getDeliveryFee() === 0 ? (
+                    <span className="font-medium text-green-600">GRATUITE ✓</span>
+                  ) : (
+                    <span className="font-medium">{getDeliveryFee()} MAD</span>
+                  )}
+                </div>
+                {getDeliveryFee() > 0 && (
+                  <p className="text-xs text-slate bg-yellow-50 rounded-lg px-3 py-2">
+                    💡 Ajoutez {(400 - getTotalPrice()).toFixed(0)} MAD pour bénéficier de la livraison gratuite !
+                  </p>
+                )}
                 <div className="border-t border-gray-200 pt-3">
                   <div className="flex justify-between text-lg font-bold">
-                    <span>Total</span>
-                    <span className="text-mint">{getTotalPrice().toFixed(0)} MAD</span>
+                    <span>Total à payer</span>
+                    <span className="text-mint">{getGrandTotal().toFixed(0)} MAD</span>
                   </div>
+                  <p className="text-xs text-slate mt-1">
+                    (dont {getTotalDeposit().toFixed(0)} MAD de caution remboursable)
+                  </p>
                 </div>
               </div>
 
               <button
                 onClick={handleSubmit}
-                disabled={isSubmitting || !customerName || !customerPhone}
+                disabled={isSubmitting || !customerName || !customerPhone || !orderStartDate}
                 className="w-full mt-6 rounded-xl bg-mint px-6 py-4 font-semibold text-white transition hover:bg-mint/90 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
@@ -495,7 +535,7 @@ export default function CheckoutPage() {
             </div>
           </div>
         </div>
-      </div>
-    </PageShell>
+      </div >
+    </PageShell >
   );
 }

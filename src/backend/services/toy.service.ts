@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, Between, In } from 'typeorm';
 import { Toy, ToyStatus } from '../entities/toy.entity';
 import { ToyCategory } from '../entities/toy-category.entity';
 import { ToyImage } from '../entities/toy-image.entity';
 import { CreateToyDto, UpdateToyDto, QueryToysDto } from '../dto/create-toy.dto';
+import { StockGateway, StockUpdateEvent } from '../gateways/stock.gateway';
 
 const slugify = (value: string) =>
   value
@@ -23,7 +24,23 @@ export class ToyService {
     private categoryRepository: Repository<ToyCategory>,
     @InjectRepository(ToyImage)
     private imageRepository: Repository<ToyImage>,
-  ) {}
+    @Optional() private stockGateway?: StockGateway,
+  ) { }
+
+  private emitStockUpdate(toy: Toy) {
+    if (this.stockGateway) {
+      const update: StockUpdateEvent = {
+        toyId: toy.id,
+        slug: toy.slug,
+        name: toy.name,
+        stockQuantity: Number(toy.stockQuantity) || 0,
+        availableQuantity: Number(toy.availableQuantity) || 0,
+        status: toy.status,
+        timestamp: Date.now(),
+      };
+      this.stockGateway.emitStockUpdate(update);
+    }
+  }
 
   private async generateUniqueSlug(baseValue: string, excludeId?: string) {
     let base = slugify(baseValue);
@@ -55,7 +72,7 @@ export class ToyService {
 
     // Create toy
     const toy = this.toyRepository.create(toyData);
-    
+
     // Handle categories
     if (categoryIds && categoryIds.length > 0) {
       const categories = await this.categoryRepository.findBy({
@@ -171,13 +188,30 @@ export class ToyService {
   }
 
   async findOne(id: string): Promise<Toy> {
-    const toy = await this.toyRepository.findOne({
-      where: { id },
-      relations: ['categories', 'images', 'cleaningLogs'],
-    });
+    // UUID v4 format validation
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const isValidUUID = uuidRegex.test(id);
+
+    let toy: Toy | null = null;
+
+    // Try to find by UUID if valid format
+    if (isValidUUID) {
+      toy = await this.toyRepository.findOne({
+        where: { id },
+        relations: ['categories', 'images', 'cleaningLogs'],
+      });
+    }
+
+    // Fallback: try to find by slug
+    if (!toy) {
+      toy = await this.toyRepository.findOne({
+        where: { slug: id },
+        relations: ['categories', 'images', 'cleaningLogs'],
+      });
+    }
 
     if (!toy) {
-      throw new NotFoundException(`Toy with ID ${id} not found`);
+      throw new NotFoundException(`Toy with ID or slug "${id}" not found`);
     }
 
     return toy;
@@ -212,8 +246,13 @@ export class ToyService {
 
       toy.availableQuantity = Math.max(0, toy.availableQuantity);
 
+      // Auto-update status based on stock if not explicitly provided
       if (updateToyDto.status === undefined) {
-        toy.status = newStock > 0 ? ToyStatus.AVAILABLE : ToyStatus.MAINTENANCE;
+        if (newStock > 0) {
+          toy.status = ToyStatus.AVAILABLE;
+        } else {
+          toy.status = ToyStatus.MAINTENANCE; // Or OUT_OF_STOCK if that exists, but MAINTENANCE seems to be the default 'unavailable' state here
+        }
       }
     }
 
@@ -242,11 +281,14 @@ export class ToyService {
     // Save updates
     await this.toyRepository.save(toy);
 
+    // Emit real-time stock update
+    this.emitStockUpdate(toy);
+
     // Update images if provided
     if (images) {
       // Remove old images
       await this.imageRepository.delete({ toy: { id } });
-      
+
       // Add new images
       const toyImages = images.map((img, index) =>
         this.imageRepository.create({
@@ -271,13 +313,17 @@ export class ToyService {
   async updateStatus(id: string, status: ToyStatus): Promise<Toy> {
     const toy = await this.findOne(id);
     toy.status = status;
-    
+
     // Auto-update last cleaned date if status is 'available'
     if (status === ToyStatus.AVAILABLE) {
       toy.lastCleaned = new Date();
     }
-    
+
     await this.toyRepository.save(toy);
+
+    // Emit real-time stock update
+    this.emitStockUpdate(toy);
+
     return toy;
   }
 
@@ -314,6 +360,28 @@ export class ToyService {
 
       const newDeposit = Number(((basePrice * percentage) / 100).toFixed(2));
       toy.depositAmount = newDeposit;
+      await this.toyRepository.save(toy);
+      updated++;
+    }
+    return updated;
+  }
+
+  // Increment stock for all toys by 1
+  async incrementStockForAll(): Promise<number> {
+    const toys = await this.toyRepository.find();
+    let updated = 0;
+    for (const toy of toys) {
+      const currentStock = Number(toy.stockQuantity || 0);
+      const currentAvailable = Number(toy.availableQuantity || 0);
+
+      toy.stockQuantity = currentStock + 1;
+      toy.availableQuantity = currentAvailable + 1;
+
+      // Ensure status is correct
+      if (toy.stockQuantity > 0 && toy.status === ToyStatus.MAINTENANCE) {
+        toy.status = ToyStatus.AVAILABLE;
+      }
+
       await this.toyRepository.save(toy);
       updated++;
     }

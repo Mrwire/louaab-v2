@@ -243,40 +243,10 @@ export default function NosPacksPage() {
 
       {/* Subscription Plans */}
       <section className="mx-auto max-w-7xl px-4 py-16">
-        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-charcoal">
-              Nos packs les plus demandés
-            </p>
-            {lastUpdated ? (
-              <p className="text-xs text-slate">
-                Dernière mise à jour&nbsp;:{" "}
-                {new Date(lastUpdated).toLocaleString("fr-FR")}
-              </p>
-            ) : null}
-            {!lastUpdated && isLoading && (
-              <p className="text-xs text-slate">Chargement des tarifs...</p>
-            )}
-            {error && !lastUpdated && !isLoading && (
-              <p className="text-xs text-coral">{error}</p>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            {error && lastUpdated && (
-              <span className="text-xs text-coral max-w-[220px] text-right">
-                {error}
-              </span>
-            )}
-            <button
-              onClick={() => loadPacks({ silent: true })}
-              disabled={isRefreshing || isLoading}
-              className="rounded-full border border-mint px-4 py-2 text-xs font-semibold uppercase tracking-wide text-mint transition hover:bg-mint/10 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isRefreshing || (isLoading && subscriptionPlans.length > 0)
-                ? "Actualisation..."
-                : "Actualiser les prix"}
-            </button>
-          </div>
+        <div className="mb-8">
+          <p className="text-sm font-semibold uppercase tracking-wide text-charcoal">
+            Nos packs les plus demandés
+          </p>
         </div>
 
         {subscriptionPlans.length === 0 ? (
@@ -301,71 +271,69 @@ export default function NosPacksPage() {
               <motion.div
                 key={plan.id}
                 variants={item}
-                className={`relative overflow-hidden rounded-3xl bg-white p-8 shadow-xl transition hover:-translate-y-2 ${
-                  plan.badge ? "ring-4 ring-mint" : "shadow-mist/30"
-                }`}
+                className={`relative overflow-hidden rounded-3xl bg-white p-8 shadow-xl transition hover:-translate-y-2 ${plan.badge ? "ring-4 ring-mint" : "shadow-mist/30"
+                  }`}
               >
                 {/* Badge */}
-              {plan.badge && (
-                <div className="absolute left-0 right-0 top-0 bg-gradient-to-r from-mint to-fresh-green py-2 text-center text-sm font-bold uppercase tracking-wide text-white">
-                  ⭐ {plan.badge}
-                </div>
-              )}
-
-              <div className={plan.badge ? "mt-8" : ""}>
-                {/* Icon */}
-                <div className="text-6xl">{plan.icon}</div>
-
-                {/* Plan Name */}
-                <h3 className="mt-6 text-2xl font-bold text-charcoal">
-                  {plan.name}
-                </h3>
-                <p className="mt-2 text-sm text-slate">{plan.description}</p>
-
-                {/* Price */}
-                <div className="mt-6">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-bold text-charcoal">
-                      {plan.priceMonthly}
-                    </span>
-                    <span className="text-lg text-slate">MAD/mois</span>
+                {plan.badge && (
+                  <div className="absolute left-0 right-0 top-0 bg-gradient-to-r from-mint to-fresh-green py-2 text-center text-sm font-bold uppercase tracking-wide text-white">
+                    ⭐ {plan.badge}
                   </div>
-                  <p className="mt-2 text-sm text-slate">
-                    Soit{" "}
-                    {Math.round(plan.priceMonthly / plan.toyCount)} MAD par
-                    jouet
-                  </p>
+                )}
+
+                <div className={plan.badge ? "mt-8" : ""}>
+                  {/* Icon */}
+                  <div className="text-6xl">{plan.icon}</div>
+
+                  {/* Plan Name */}
+                  <h3 className="mt-6 text-2xl font-bold text-charcoal">
+                    {plan.name}
+                  </h3>
+                  <p className="mt-2 text-sm text-slate">{plan.description}</p>
+
+                  {/* Price */}
+                  <div className="mt-6">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-4xl font-bold text-charcoal">
+                        {plan.priceMonthly}
+                      </span>
+                      <span className="text-lg text-slate">MAD/mois</span>
+                    </div>
+                    <p className="mt-2 text-sm text-slate">
+                      Soit{" "}
+                      {Math.round(plan.priceMonthly / plan.toyCount)} MAD par
+                      jouet
+                    </p>
+                  </div>
+
+                  {/* Features */}
+                  <ul className="mt-8 space-y-3">
+                    {plan.features.map((feature, index) => (
+                      <li
+                        key={index}
+                        className="flex items-start gap-3 text-sm text-slate"
+                      >
+                        <Check size={18} className="mt-0.5 flex-shrink-0 text-mint" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* CTA Button */}
+                  <button
+                    onClick={() => {
+                      setSelectedPack(plan);
+                      setIsReservationModalOpen(true);
+                    }}
+                    className={`mt-8 w-full rounded-xl py-4 text-sm font-bold uppercase tracking-wide transition ${plan.badge
+                        ? "bg-gradient-to-r from-mint to-fresh-green text-charcoal shadow-lg shadow-mint/30 hover:shadow-xl hover:shadow-mint/40 hover:text-white"
+                        : "bg-charcoal text-white hover:bg-slate"
+                      }`}
+                  >
+                    Choisir ce pack
+                    <ArrowRight className="ml-2 inline" size={16} />
+                  </button>
                 </div>
-
-                {/* Features */}
-                <ul className="mt-8 space-y-3">
-                  {plan.features.map((feature, index) => (
-                    <li
-                      key={index}
-                      className="flex items-start gap-3 text-sm text-slate"
-                    >
-                      <Check size={18} className="mt-0.5 flex-shrink-0 text-mint" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-
-                {/* CTA Button */}
-                <button
-                  onClick={() => {
-                    setSelectedPack(plan);
-                    setIsReservationModalOpen(true);
-                  }}
-                  className={`mt-8 w-full rounded-xl py-4 text-sm font-bold uppercase tracking-wide transition ${
-                    plan.badge
-                      ? "bg-gradient-to-r from-mint to-fresh-green text-charcoal shadow-lg shadow-mint/30 hover:shadow-xl hover:shadow-mint/40 hover:text-white"
-                      : "bg-charcoal text-white hover:bg-slate"
-                  }`}
-                >
-                  Choisir ce pack
-                  <ArrowRight className="ml-2 inline" size={16} />
-                </button>
-              </div>
               </motion.div>
             ))}
           </motion.div>

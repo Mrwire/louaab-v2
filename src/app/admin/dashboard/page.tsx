@@ -56,7 +56,7 @@ const safeNumber = (value: unknown, fallback = 0): number => {
 
 const generatePackId = () => `pack-${Math.random().toString(36).slice(2)}`;
 
-const withTimeout = async <T>(promise: Promise<T>, ms = 7000, label = 'request'): Promise<T> => {
+const withTimeout = async <T,>(promise: Promise<T>, ms = 7000, label = 'request'): Promise<T> => {
   let timeoutId: NodeJS.Timeout;
   return new Promise<T>((resolve, reject) => {
     timeoutId = setTimeout(() => reject(new Error(`Timeout ${label}`)), ms);
@@ -151,7 +151,7 @@ export default function AdminDashboard() {
   const [alerts, setAlerts] = useState<DashboardAlert[]>([]);
   const [packsSnapshot, setPacksSnapshot] = useState<Pack[]>([]);
   const [orderStats, setOrderStats] = useState<AdminOrderStats | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
@@ -175,76 +175,60 @@ export default function AdminDashboard() {
         setIsLoading(true);
       }
 
-      let contactLoadError: string | null = null;
+      // Load each data source independently - failures don't block others
+      const safeLoad = async <T,>(
+        fn: () => Promise<T>,
+        fallback: T,
+        label: string
+      ): Promise<T> => {
+        try {
+          const result = await Promise.race([
+            fn(),
+            new Promise<T>((_, reject) =>
+              setTimeout(() => reject(new Error(`${label} timeout`)), 8000)
+            ),
+          ]);
+          return result;
+        } catch (err) {
+          console.warn(`Dashboard: ${label} failed:`, err);
+          return fallback;
+        }
+      };
 
       try {
+        // Load all data in parallel, each with its own error handling
         const [ordersData, packsData, statsData, contactData] = await Promise.all([
-          withTimeout(fetchAdminOrders(), 7000, 'orders'),
-          withTimeout(fetchPacksSnapshot(), 7000, 'packs'),
-          withTimeout(fetchAdminOrderStats({ rangeDays: statsRange }), 7000, 'stats'),
-          withTimeout(fetchRecentContacts(), 5000, 'contacts').catch((error) => {
-            contactLoadError =
-              error instanceof Error
-                ? error.message
-                : "Impossible de charger les messages de contact";
-            return [];
-          }),
+          safeLoad(fetchAdminOrders, [], 'orders'),
+          safeLoad(fetchPacksSnapshot, [], 'packs'),
+          safeLoad(() => fetchAdminOrderStats({ rangeDays: statsRange }), null as any, 'stats'),
+          safeLoad(fetchRecentContacts, [], 'contacts'),
         ]);
 
         if (!mounted) return;
 
+        // Set data even if some are empty
         setOrders(ordersData);
         setPacksSnapshot(packsData);
         setOrderStats(statsData);
         setContactMessages(contactData);
-        setContactError(contactLoadError);
         recomputeDashboard(ordersData, packsData);
 
-        if (!hasWelcomed) {
-          showInfo(
-            "Dashboard Admin",
-            `Bienvenue ! ${ordersData.length} commandes chargées.`,
-            3000,
-          );
+        // Show warning if no orders loaded (API might be down)
+        if (ordersData.length === 0) {
+          setError("Aucune commande chargée. L'API est peut-être indisponible.");
+        }
+
+        if (!hasWelcomed && ordersData.length > 0) {
+          showInfo("Dashboard Admin", `${ordersData.length} commandes chargées.`, 3000);
           setHasWelcomed(true);
         }
       } catch (err) {
-        console.error("Erreur Dashboard:", err);
-        if (!mounted) return;
-      const localOrders = OrderManager.getAllOrders();
-        const localPacks = PackManager.getAllPacks();
-
-        if (localOrders.length || localPacks.length) {
-          setOrders(localOrders);
-          setPacksSnapshot(localPacks);
-          setOrderStats(null);
-          setContactMessages([]);
-          setContactError(contactLoadError);
-          recomputeDashboard(localOrders, localPacks);
-          setError(
-            err instanceof Error
-              ? `API indisponible: ${err.message}`
-              : "API indisponible, affichage des données locales",
-          );
-        } else {
-          setOrders([]);
-          setPacksSnapshot([]);
-          setOrderStats(null);
-          setContactMessages([]);
-          setContactError(contactLoadError);
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Impossible de charger les données du dashboard",
-          );
+        console.error("Dashboard critical error:", err);
+        if (mounted) {
+          setError("Erreur lors du chargement du dashboard");
         }
-
-        showWarning(
-          "Dashboard",
-          "Impossible de charger les données en temps réel",
-          4000,
-        );
       } finally {
+        // ALWAYS stop loading - never block
         if (mounted) {
           setIsLoading(false);
         }
@@ -256,9 +240,9 @@ export default function AdminDashboard() {
     return () => {
       mounted = false;
     };
-  }, [showInfo, showWarning, statsRange, hasWelcomed]);
+  }, [statsRange, hasWelcomed]);
 
-  const filteredOrders = orders.filter(order => 
+  const filteredOrders = orders.filter(order =>
     selectedStatus === "all" || order.status === selectedStatus
   );
 
@@ -295,16 +279,7 @@ export default function AdminDashboard() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-mint border-t-transparent"></div>
-          <p className="mt-4 text-slate">Chargement du dashboard...</p>
-        </div>
-      </div>
-    );
-  }
+  // Loading state removed - dashboard always renders immediately
 
   const getStatusColor = (status: Order["status"]) => {
     switch (status) {
@@ -401,8 +376,8 @@ export default function AdminDashboard() {
         <div className="mx-auto max-w-7xl px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Link 
-                href="/" 
+              <Link
+                href="/"
                 className="text-sm text-gray-600 hover:text-mint transition-colors"
               >
                 ← Retour au site
@@ -600,8 +575,8 @@ export default function AdminDashboard() {
                     {orders.filter(o => o.status === 'pending').length}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    {orders.filter(o => o.status === 'pending').length > 0 
-                      ? "⚠️ Action requise" 
+                    {orders.filter(o => o.status === 'pending').length > 0
+                      ? "⚠️ Action requise"
                       : "✅ À jour"}
                   </p>
                 </div>
@@ -628,11 +603,10 @@ export default function AdminDashboard() {
                   <button
                     key={range}
                     onClick={() => setStatsRange(range)}
-                    className={`rounded-full px-4 py-1 text-xs font-semibold transition ${
-                      statsRange === range
-                        ? "bg-mint text-white"
-                        : "bg-gray-100 text-slate hover:bg-gray-200"
-                    }`}
+                    className={`rounded-full px-4 py-1 text-xs font-semibold transition ${statsRange === range
+                      ? "bg-mint text-white"
+                      : "bg-gray-100 text-slate hover:bg-gray-200"
+                      }`}
                   >
                     {range} j
                   </button>
@@ -748,14 +722,13 @@ export default function AdminDashboard() {
             <h3 className="text-lg font-semibold text-charcoal mb-4">Alertes & Notifications</h3>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {alerts.map((alert, index) => (
-                <div 
+                <div
                   key={index}
-                  className={`rounded-lg border p-4 ${
-                    alert.type === 'error' ? 'bg-red-50 border-red-200' :
+                  className={`rounded-lg border p-4 ${alert.type === 'error' ? 'bg-red-50 border-red-200' :
                     alert.type === 'warning' ? 'bg-yellow-50 border-yellow-200' :
-                    alert.type === 'success' ? 'bg-green-50 border-green-200' :
-                    'bg-blue-50 border-blue-200'
-                  }`}
+                      alert.type === 'success' ? 'bg-green-50 border-green-200' :
+                        'bg-blue-50 border-blue-200'
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     {alert.type === 'error' && <XCircle className="h-5 w-5 text-red-600" />}
@@ -763,20 +736,18 @@ export default function AdminDashboard() {
                     {alert.type === 'success' && <CheckCircle className="h-5 w-5 text-green-600" />}
                     {alert.type === 'info' && <Clock className="h-5 w-5 text-blue-600" />}
                     <div>
-                      <h4 className={`text-sm font-semibold ${
-                        alert.type === 'error' ? 'text-red-800' :
+                      <h4 className={`text-sm font-semibold ${alert.type === 'error' ? 'text-red-800' :
                         alert.type === 'warning' ? 'text-yellow-800' :
-                        alert.type === 'success' ? 'text-green-800' :
-                        'text-blue-800'
-                      }`}>
+                          alert.type === 'success' ? 'text-green-800' :
+                            'text-blue-800'
+                        }`}>
                         {alert.title}
                       </h4>
-                      <p className={`text-sm ${
-                        alert.type === 'error' ? 'text-red-700' :
+                      <p className={`text-sm ${alert.type === 'error' ? 'text-red-700' :
                         alert.type === 'warning' ? 'text-yellow-700' :
-                        alert.type === 'success' ? 'text-green-700' :
-                        'text-blue-700'
-                      }`}>
+                          alert.type === 'success' ? 'text-green-700' :
+                            'text-blue-700'
+                        }`}>
                         {alert.message}
                       </p>
                     </div>
@@ -846,8 +817,8 @@ export default function AdminDashboard() {
           <div className="mb-8">
             <h3 className="text-lg font-semibold text-charcoal mb-4">Commandes récentes</h3>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {recentOrders.map((order) => (
-                <div key={order.id} className="rounded-xl bg-white p-4 shadow-sm border border-gray-100">
+              {recentOrders.map((order, index) => (
+                <div key={`${order.id}-${index}`} className="rounded-xl bg-white p-4 shadow-sm border border-gray-100">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <div className="rounded-full bg-mint/10 p-2">
@@ -860,12 +831,12 @@ export default function AdminDashboard() {
                     </div>
                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(order.status)}`}>
                       {getStatusIcon(order.status)}
-                      {order.status === 'pending' ? 'En attente' : 
-                       order.status === 'confirmed' ? 'Confirmée' :
-                       order.status === 'completed' ? 'Terminée' : 'Annulée'}
+                      {order.status === 'pending' ? 'En attente' :
+                        order.status === 'confirmed' ? 'Confirmée' :
+                          order.status === 'completed' ? 'Terminée' : 'Annulée'}
                     </span>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <User className="h-3 w-3 text-gray-400" />
@@ -891,41 +862,37 @@ export default function AdminDashboard() {
           <div className="flex gap-2">
             <button
               onClick={() => setSelectedStatus('all')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                selectedStatus === 'all' 
-                  ? 'bg-mint text-white' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${selectedStatus === 'all'
+                ? 'bg-mint text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
             >
               Toutes
             </button>
             <button
               onClick={() => setSelectedStatus('pending')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                selectedStatus === 'pending' 
-                  ? 'bg-mint text-white' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${selectedStatus === 'pending'
+                ? 'bg-mint text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
             >
               En attente
             </button>
             <button
               onClick={() => setSelectedStatus('confirmed')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                selectedStatus === 'confirmed' 
-                  ? 'bg-mint text-white' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${selectedStatus === 'confirmed'
+                ? 'bg-mint text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
             >
               Confirmées
             </button>
             <button
               onClick={() => setSelectedStatus('completed')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                selectedStatus === 'completed' 
-                  ? 'bg-mint text-white' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${selectedStatus === 'completed'
+                ? 'bg-mint text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
             >
               Terminées
             </button>
@@ -934,8 +901,8 @@ export default function AdminDashboard() {
 
         {/* Orders List */}
         <div className="space-y-4">
-          {filteredOrders.map((order) => (
-            <div key={order.id} className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+          {filteredOrders.map((order, index) => (
+            <div key={`${order.id}-${index}`} className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <div className="rounded-full bg-mint/10 p-2">
@@ -949,9 +916,9 @@ export default function AdminDashboard() {
                 <div className="flex items-center gap-2">
                   <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ${getStatusColor(order.status)}`}>
                     {getStatusIcon(order.status)}
-                    {order.status === 'pending' ? 'En attente' : 
-                     order.status === 'confirmed' ? 'Confirmée' :
-                     order.status === 'completed' ? 'Terminée' : 'Annulée'}
+                    {order.status === 'pending' ? 'En attente' :
+                      order.status === 'confirmed' ? 'Confirmée' :
+                        order.status === 'completed' ? 'Terminée' : 'Annulée'}
                   </span>
                   <button
                     onClick={() => setSelectedOrder(order)}
@@ -1088,4 +1055,3 @@ export default function AdminDashboard() {
     </div>
   );
 }
-

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { Order, OrderStatus } from '../entities/order.entity';
@@ -7,6 +7,7 @@ import { Toy, ToyStatus } from '../entities/toy.entity';
 import { Customer } from '../entities/customer.entity';
 import { Delivery, DeliveryStatus } from '../entities/delivery.entity';
 import { CreateOrderDto, UpdateOrderDto, QueryOrdersDto } from '../dto/create-order.dto';
+import { StockGateway, StockUpdateEvent } from '../gateways/stock.gateway';
 
 @Injectable()
 export class OrderService {
@@ -21,7 +22,26 @@ export class OrderService {
     private customerRepository: Repository<Customer>,
     @InjectRepository(Delivery)
     private deliveryRepository: Repository<Delivery>,
-  ) {}
+    @Optional() private stockGateway?: StockGateway,
+  ) { }
+
+  /**
+   * Emit real-time stock update via WebSocket
+   */
+  private emitStockUpdate(toy: Toy) {
+    if (this.stockGateway) {
+      const update: StockUpdateEvent = {
+        toyId: toy.id,
+        slug: toy.slug,
+        name: toy.name,
+        stockQuantity: Number(toy.stockQuantity) || 0,
+        availableQuantity: Number(toy.availableQuantity) || 0,
+        status: toy.status,
+        timestamp: Date.now(),
+      };
+      this.stockGateway.emitStockUpdate(update);
+    }
+  }
 
   async create(createOrderDto: CreateOrderDto): Promise<Order> {
     const { customerId, items, ...orderData } = createOrderDto;
@@ -202,6 +222,50 @@ export class OrderService {
     const previousStatus = order.status;
     order.status = status;
 
+    const adjustToyStock = async (
+      toyId: string,
+      delta: number,
+      options?: { forceStatus?: ToyStatus; rentalDelta?: number },
+    ) => {
+      const updatedToy = await this.toyRepository.manager.transaction(async (manager) => {
+        const toy = await manager.findOne(Toy, {
+          where: { id: toyId },
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!toy) {
+          throw new NotFoundException(`Jouet ${toyId} introuvable`);
+        }
+
+        const physical = Number(toy.stockQuantity ?? 0);
+        const available = Number(toy.availableQuantity ?? physical);
+
+        const newPhysical = Math.max(0, physical + delta);
+        const newAvailable = Math.max(0, Math.min(available + delta, newPhysical));
+
+        toy.stockQuantity = newPhysical;
+        toy.availableQuantity = newAvailable;
+
+        if (options?.forceStatus) {
+          toy.status = options.forceStatus;
+        } else if (newPhysical <= 0) {
+          toy.status = ToyStatus.MAINTENANCE;
+        } else if (![ToyStatus.RENTED, ToyStatus.RESERVED].includes(toy.status)) {
+          toy.status = ToyStatus.AVAILABLE;
+        }
+
+        if (options?.rentalDelta) {
+          toy.timesRented = Math.max(0, (toy.timesRented ?? 0) + options.rentalDelta);
+        }
+
+        return manager.save(toy);
+      });
+
+      // Emit real-time stock update via WebSocket
+      this.emitStockUpdate(updatedToy);
+      return updatedToy;
+    };
+
     if (status === OrderStatus.CONFIRMED) {
       if (previousStatus !== OrderStatus.DRAFT) {
         throw new BadRequestException('Confirmation impossible: statut actuel non pending/draft');
@@ -213,55 +277,32 @@ export class OrderService {
           throw new NotFoundException(`Jouet ${item.toy.id} introuvable`);
         }
         const physicalStock = Number(toy.stockQuantity ?? 0);
-        const available = Number(toy.availableQuantity ?? 0);
+        const available = Number(toy.availableQuantity ?? physicalStock);
         const baseAvailable = available > 0 ? available : physicalStock;
         if (baseAvailable < item.quantity) {
           throw new BadRequestException(`Stock insuffisant pour ${toy.name}. Disponible: ${baseAvailable}`);
         }
       }
       for (const item of order.items) {
-        const toy = await this.toyRepository.findOne({ where: { id: item.toy.id } });
-        if (toy) {
-          const physicalStock = Number(toy.stockQuantity ?? 0);
-          const available = Number(toy.availableQuantity ?? 0);
-          const baseAvailable = available > 0 ? available : physicalStock;
-          const remaining = Math.max(0, baseAvailable - item.quantity);
-          toy.availableQuantity = physicalStock > 0 ? Math.min(remaining, physicalStock) : remaining;
-          toy.status = ToyStatus.RESERVED;
-          toy.timesRented = Math.max(0, (toy.timesRented ?? 0) + item.quantity);
-          await this.toyRepository.save(toy);
-        }
+        await adjustToyStock(item.toy.id, -item.quantity, {
+          forceStatus: ToyStatus.RESERVED,
+          rentalDelta: item.quantity,
+        });
       }
     } else if (status === OrderStatus.DELIVERED) {
       for (const item of order.items) {
-        const toy = await this.toyRepository.findOne({ where: { id: item.toy.id } });
-        if (toy) {
-          toy.status = ToyStatus.RENTED;
-          await this.toyRepository.save(toy);
-        }
+        await adjustToyStock(item.toy.id, 0, { forceStatus: ToyStatus.RENTED });
       }
     } else if (status === OrderStatus.RETURNED) {
       for (const item of order.items) {
-        const toy = await this.toyRepository.findOne({ where: { id: item.toy.id } });
-        if (toy) {
-          toy.status = ToyStatus.CLEANING;
-          const currentAvailable = Number(toy.availableQuantity || 0);
-          const maxStock = Number(toy.stockQuantity || currentAvailable);
-          toy.availableQuantity = Math.min(currentAvailable + item.quantity, maxStock || currentAvailable + item.quantity);
-          await this.toyRepository.save(toy);
-        }
+        await adjustToyStock(item.toy.id, item.quantity, { forceStatus: ToyStatus.CLEANING });
       }
     } else if (status === OrderStatus.COMPLETED) {
       for (const item of order.items) {
-        const toy = await this.toyRepository.findOne({ where: { id: item.toy.id } });
-        if (toy) {
-          toy.status = ToyStatus.AVAILABLE;
-          if (previousStatus !== OrderStatus.RETURNED) {
-            const currentAvailable = Number(toy.availableQuantity || 0);
-            const maxStock = Number(toy.stockQuantity || currentAvailable);
-            toy.availableQuantity = Math.min(currentAvailable + item.quantity, maxStock || currentAvailable + item.quantity);
-          }
-          await this.toyRepository.save(toy);
+        if (previousStatus !== OrderStatus.RETURNED) {
+          await adjustToyStock(item.toy.id, item.quantity, { forceStatus: ToyStatus.AVAILABLE });
+        } else {
+          await adjustToyStock(item.toy.id, 0, { forceStatus: ToyStatus.AVAILABLE });
         }
       }
     }
@@ -281,14 +322,29 @@ export class OrderService {
 
     // Return toys to available
     for (const item of order.items) {
-      const toy = await this.toyRepository.findOne({
-        where: { id: item.toy.id },
-      });
-      if (toy) {
+      const updatedToy = await this.toyRepository.manager.transaction(async (manager) => {
+        const toy = await manager.findOne(Toy, {
+          where: { id: item.toy.id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!toy) return null;
+
+        const physical = Number(toy.stockQuantity ?? 0);
+        const available = Number(toy.availableQuantity ?? 0);
+        const creditedPhysical = physical + item.quantity;
+        const creditedAvailable = available + item.quantity;
+
+        toy.stockQuantity = creditedPhysical;
+        toy.availableQuantity = Math.min(creditedAvailable, creditedPhysical);
         toy.status = ToyStatus.AVAILABLE;
-        toy.availableQuantity += item.quantity;
-        toy.timesRented -= item.quantity;
-        await this.toyRepository.save(toy);
+        toy.timesRented = Math.max(0, (toy.timesRented ?? 0) - item.quantity);
+
+        return manager.save(toy);
+      });
+
+      // Emit real-time stock update via WebSocket
+      if (updatedToy) {
+        this.emitStockUpdate(updatedToy);
       }
     }
 
@@ -307,17 +363,36 @@ export class OrderService {
       if (!toy) {
         continue;
       }
-      // Si la commande avait décrémenté le stock (confirmed ou delivered), on récrédite
+      // If the order had already decremented stock (confirmed or delivered), credit it back safely
       if ([OrderStatus.CONFIRMED, OrderStatus.DELIVERED].includes(previousStatus)) {
-        const physical = Number(toy.stockQuantity ?? 0);
-        const currentAvailable = Number(toy.availableQuantity ?? 0);
-        const credited = currentAvailable + item.quantity;
-        toy.availableQuantity = physical > 0 ? Math.min(credited, physical) : credited;
+        const updatedToy = await this.toyRepository.manager.transaction(async (manager) => {
+          const lockedToy = await manager.findOne(Toy, {
+            where: { id: item.toy.id },
+            lock: { mode: 'pessimistic_write' },
+          });
+          if (!lockedToy) return null;
+          const physical = Number(lockedToy.stockQuantity ?? 0);
+          const currentAvailable = Number(lockedToy.availableQuantity ?? 0);
+          const newPhysical = Math.max(0, physical + item.quantity);
+          const credited = currentAvailable + item.quantity;
+          lockedToy.stockQuantity = newPhysical;
+          lockedToy.availableQuantity = newPhysical > 0 ? Math.min(credited, newPhysical) : credited;
+          lockedToy.status = ToyStatus.AVAILABLE;
+          lockedToy.timesRented = Math.max(0, (lockedToy.timesRented ?? 0) - item.quantity);
+          return manager.save(lockedToy);
+        });
+
+        // Emit real-time stock update via WebSocket
+        if (updatedToy) {
+          this.emitStockUpdate(updatedToy);
+        }
+        continue;
       }
-      // Rétablir le statut dispo et corriger timesRented
+      // Restore status and rental counter when no stock credit is needed
       toy.status = ToyStatus.AVAILABLE;
       toy.timesRented = Math.max(0, (toy.timesRented ?? 0) - item.quantity);
-      await this.toyRepository.save(toy);
+      const savedToy = await this.toyRepository.save(toy);
+      this.emitStockUpdate(savedToy);
     }
 
     order.status = OrderStatus.DRAFT;

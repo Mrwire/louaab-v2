@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ShoppingCart, Plus, Minus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/contexts/cart-context";
+import { useToyStock } from "@/contexts/stock-context";
 import { ToyData } from "@/lib/toys-data";
 import { formatDateInput } from "@/lib/date";
 
@@ -22,16 +23,19 @@ export default function CartButton({ toy, className = "", allowDirectAdd = false
   const defaultDuration = "weekly";
   const toyKey = toy.backendId ?? String(toy.id);
   const itemId = `${toyKey}-${defaultDuration}`;
+
+  // Real-time stock from WebSocket (fallback to static stock)
+  const { stockQuantity: wsStock } = useToyStock(toyKey);
   const availableStock = Math.max(
     0,
-    Number(
+    wsStock !== undefined ? wsStock : Number(
       toy.stockQuantity ??
-        (toy as any).availableQuantity ??
-        toy.stock ??
-        (items.find(i => (i.toy.backendId ?? String(i.toy.id)) === toyKey)?.toy.stock)
-    ) || 0
+      (toy as any).availableQuantity ??
+      toy.stock ??
+      0
+    )
   );
-  
+
   const cartItem = items.find(item => item.id === itemId);
   const isInCart = !!cartItem;
 
@@ -45,12 +49,12 @@ export default function CartButton({ toy, className = "", allowDirectAdd = false
 
     // Sinon, ajouter directement avec les valeurs par défaut
     setIsAdding(true);
-    
+
     // Valeurs par défaut pour l'ajout rapide
     const defaultDate = formatDateInput();
-    
+
     addToCart(toy, defaultDuration, defaultDate);
-    
+
     // Effet confetti simple
     const confettiCount = 20;
     for (let i = 0; i < confettiCount; i++) {
@@ -66,20 +70,20 @@ export default function CartButton({ toy, className = "", allowDirectAdd = false
         confetti.style.zIndex = '9999';
         confetti.style.transition = 'all 1.5s ease-out';
         document.body.appendChild(confetti);
-        
+
         setTimeout(() => {
           confetti.style.top = `${window.innerHeight + 50}px`;
           confetti.style.left = `${parseInt(confetti.style.left) + (Math.random() - 0.5) * 150}px`;
           confetti.style.opacity = '0';
           confetti.style.transform = `rotate(${Math.random() * 360}deg)`;
         }, 10);
-        
+
         setTimeout(() => {
           confetti.remove();
         }, 1500);
       }, i * 30);
     }
-    
+
     // Animation de confirmation
     setTimeout(() => setIsAdding(false), 1000);
   };

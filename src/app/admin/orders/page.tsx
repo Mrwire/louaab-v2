@@ -93,7 +93,16 @@ export default function OrdersPage() {
 
     try {
       const [ordersData, statsData] = await Promise.all([fetchAdminOrders(), fetchAdminOrderStats()]);
-      setOrders(ordersData);
+
+      // Deduplicate orders based on ID (normalized to string and cleaned)
+      const uniqueOrders = Array.from(new Map(ordersData.map(order => {
+        const key = String(order.id).trim();
+        return [key, order];
+      })).values());
+
+      console.log(`[loadOrders] Loaded ${ordersData.length} orders, ${uniqueOrders.length} unique.`);
+
+      setOrders(uniqueOrders);
       setStats(statsData);
     } catch (err) {
       console.error("Erreur lors du chargement des commandes:", err);
@@ -299,8 +308,8 @@ export default function OrdersPage() {
         </div>
 
         <div className="space-y-4">
-          {filteredAndSortedOrders.map((order) => (
-            <div key={order.id} className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+          {filteredAndSortedOrders.map((order, index) => (
+            <div key={`${order.id}-${index}`} className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-4">
                   <div className="rounded-full bg-mint/10 p-3">
@@ -328,11 +337,12 @@ export default function OrdersPage() {
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                 <InfoRow icon={<User className="h-4 w-4 text-gray-400" />} label="Client" value={order.customerName} />
                 <InfoRow icon={<Phone className="h-4 w-4 text-gray-400" />} label="Téléphone" value={order.customerPhone} />
                 <InfoRow icon={<Package className="h-4 w-4 text-gray-400" />} label="Articles" value={`${order.items.length}`} />
                 <InfoRow icon={<DollarSign className="h-4 w-4 text-gray-400" />} label="Total" value={`${order.totalPrice} MAD`} />
+                <InfoRow icon={<Shield className="h-4 w-4 text-amber-500" />} label="Caution" value={order.depositAmount ? `${order.depositAmount} MAD` : "-"} />
               </div>
 
               {order.items.length > 0 && (
@@ -456,10 +466,25 @@ export default function OrdersPage() {
                   ))}
                 </div>
 
-                <div className="border-t pt-4">
+                <div className="border-t pt-4 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-lg font-semibold text-charcoal">Total</span>
-                    <span className="text-2xl font-bold text-mint">{selectedOrder.totalPrice} MAD</span>
+                    <span className="text-sm font-medium text-slate">Sous-total location</span>
+                    <span className="text-lg font-semibold text-charcoal">{selectedOrder.totalPrice} MAD</span>
+                  </div>
+                  {selectedOrder.depositAmount && selectedOrder.depositAmount > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-amber-600 flex items-center gap-1">
+                        <Shield className="h-4 w-4" />
+                        Caution
+                      </span>
+                      <span className="text-lg font-semibold text-amber-600">{selectedOrder.depositAmount} MAD</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between pt-2 border-t border-dashed">
+                    <span className="text-lg font-semibold text-charcoal">Total à payer</span>
+                    <span className="text-2xl font-bold text-mint">
+                      {(selectedOrder.totalPrice + (selectedOrder.depositAmount || 0))} MAD
+                    </span>
                   </div>
                 </div>
               </div>
@@ -476,14 +501,14 @@ export default function OrdersPage() {
                     {statusLabels[selectedOrder.status]}
                   </span>
                 </div>
-        <OrderActions
-          order={selectedOrder}
-          updatingId={updatingId}
-          onUpdate={updateOrderStatus}
-          onConfirmAndDeliver={confirmAndSendToReturns}
-          onReset={resetOrder}
-          compact
-        />
+                <OrderActions
+                  order={selectedOrder}
+                  updatingId={updatingId}
+                  onUpdate={updateOrderStatus}
+                  onConfirmAndDeliver={confirmAndSendToReturns}
+                  onReset={resetOrder}
+                  compact
+                />
               </div>
             </div>
           </div>
@@ -574,14 +599,6 @@ function OrderActions({ order, updatingId, onUpdate, onReset, onConfirmAndDelive
   if (order.status === "delivered") {
     return (
       <div className={stackClass}>
-        <button
-          onClick={() => onUpdate(order.id, "returned")}
-          disabled={busy || disabled}
-          className={`${btnClass} bg-emerald-600 hover:bg-emerald-700`}
-        >
-          {busy ? <Spinner /> : <Shield className="h-4 w-4" />}
-          {busy ? "En cours..." : "Marquer restituée"}
-        </button>
         {resetButton}
       </div>
     );

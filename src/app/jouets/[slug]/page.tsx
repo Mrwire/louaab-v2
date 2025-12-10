@@ -4,18 +4,15 @@ import Link from 'next/link';
 import { PageShell } from '@/components/page-shell';
 import ToyCardWithReservation from '@/components/toy-card-with-reservation';
 import ToyDetailClient from '@/components/toy-detail-client';
-import { getToyBySlug, getAllToys, getToysByCategory } from '@/lib/toys-data';
+import ToyAvailabilityLive from '@/components/toy-availability-live';
+import { getToyBySlug, getToysByCategory } from '@/lib/toys-data';
 
-export async function generateStaticParams() {
-  const toys = await getAllToys();
-  return toys.map((toy) => ({
-    slug: toy.slug,
-  }));
-}
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-  const toy = await getToyBySlug(slug);
+export async function generateMetadata({ params }: { params: { slug: string } }) {
+  const { slug } = params;
+  const toy = await getToyBySlug(slug, { noCache: true, revalidateSeconds: 0 });
   
   if (!toy) {
     return {
@@ -34,9 +31,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-export default async function ToyDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-  const toy = await getToyBySlug(slug);
+export default async function ToyDetailPage({ params }: { params: { slug: string } }) {
+  const { slug } = params;
+  const toy = await getToyBySlug(slug, { noCache: true, revalidateSeconds: 0 });
 
   if (!toy) {
     notFound();
@@ -156,21 +153,8 @@ export default async function ToyDetailPage({ params }: { params: Promise<{ slug
                 </div>
               </div>
 
-              {/* Stock */}
-              <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate">
-                  Disponibilité
-                </div>
-                <div className={`mt-2 font-bold ${
-                  toy.stock && parseInt(toy.stock.toString()) > 0 
-                    ? 'text-green-600' 
-                    : 'text-red-600'
-                }`}>
-                  {toy.stock && parseInt(toy.stock.toString()) > 0 
-                    ? 'En stock' 
-                    : 'Rupture de stock'}
-                </div>
-              </div>
+              {/* Stock (live via client component) */}
+              <ToyAvailabilityLive toy={toy} />
 
               {/* Category */}
               {toy.category && (

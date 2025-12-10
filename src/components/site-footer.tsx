@@ -25,7 +25,7 @@ const footerLinks = {
 
 const socialLinks = [
   { icon: Facebook, href: "https://facebook.com/louaab", label: "Facebook" },
-  { icon: Instagram, href: "https://instagram.com/louaab", label: "Instagram" },
+  { icon: Instagram, href: "https://www.instagram.com/louaab.ma/", label: "Instagram" },
   { icon: MessageCircle, href: "https://wa.me/212665701513", label: "WhatsApp" },
 ];
 
@@ -46,7 +46,7 @@ export function SiteFooter() {
                 className="h-auto w-32"
               />
             </Link>
-            
+
             <p className="text-sm leading-relaxed text-slate">
               🎈 On loue, on joue ! Le premier service marocain de location de jouets pour tous les âges.
             </p>
@@ -125,7 +125,7 @@ export function SiteFooter() {
               </a>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-3 text-sm">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-peach/10">
               <Phone size={18} className="text-coral" />
@@ -137,7 +137,7 @@ export function SiteFooter() {
               </a>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-3 text-sm">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-blue/10">
               <Clock size={18} className="text-sky-blue" />
@@ -154,7 +154,7 @@ export function SiteFooter() {
           <p>
             © {new Date().getFullYear()} <span className="font-semibold text-charcoal">LOUAAB</span> – On loue, on joue !
           </p>
-          
+
           <div className="flex items-center gap-2">
             <span className="text-xs uppercase tracking-wider text-slate/60">
               Paiement sécurisé

@@ -140,3 +140,16 @@ Import jouets : JSON `toys_import_ready.json` et images `/public/toys/import/`.
 - Repo prod : `/root/louaab-project`, scripts : `npm run build`, `npm run start`, `npm run build:api`, `npm run start:prod:api`.
 - Stock commandes : décrément à la confirmation, reset ré-crédite. Statuts : pending/draft → confirmed → delivered → returned → completed.
 - Déploiement : scp → `npm run build` → `pm2 restart louaab-frontend` (et backend si modifié).
+
+## 14) Incident 2025-11-30 : /jouets vs admin
+- Symptom: front listait un jouet fantome (slug `hovershotsatasingleplayer` sans image) alors que l'admin/API etaient corrects.
+- Cause: build Next en prod embarquait encore le fallback `public/toys/toys-mapping.json` (merge local + backend). Le code source etait propre mais la build du 30/11 12:40 utilisait l'ancienne logique.
+- Correctif: `cd /root/louaab-project && npm run build` puis `pm2 restart louaab-frontend`. Verif post-build: `grep -R "toys-mapping" .next/server/chunks` doit etre vide.
+- Etat actuel: API /toys retourne 363 items, 0 doublon de slug, seul `hover-shot-sat-a-single-player` reste. Le front /jouets consomme l'API en no-store cote client.
+- Si ecart front/admin: refaire build+restart, ou declencher `/api/revalidate?tag=toys` si c'est juste le cache ISR.
+
+
+Upload seul (front+back, sans redémarrer) :
+cd E:\projet-2026\louaab-lastest-update\louaab-project; ./sync-to-prod.ps1
+Upload + build + restart pm2 (plus long) :
+./sync-to-prod.ps1 -AutoRestart

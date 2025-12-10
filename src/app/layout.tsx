@@ -4,6 +4,7 @@ import "./globals.css";
 import { CartProvider } from "@/contexts/cart-context";
 import { FavoritesProvider } from "@/contexts/favorites-context";
 import { PackReservationsProvider } from "@/contexts/pack-reservations";
+import { StockProvider } from "@/contexts/stock-context";
 import { MaintenanceCheck } from "@/components/maintenance-check";
 
 const poppins = Poppins({
@@ -55,14 +56,17 @@ export default function RootLayout({
         className={`min-h-screen bg-soft-white text-charcoal ${poppins.variable} ${nunito.variable} ${geistMono.variable}`}
       >
         <MaintenanceCheck />
-        <CartProvider>
-          <FavoritesProvider>
-            <PackReservationsProvider>
-              {children}
-            </PackReservationsProvider>
-          </FavoritesProvider>
-        </CartProvider>
+        <StockProvider>
+          <CartProvider>
+            <FavoritesProvider>
+              <PackReservationsProvider>
+                {children}
+              </PackReservationsProvider>
+            </FavoritesProvider>
+          </CartProvider>
+        </StockProvider>
       </body>
     </html>
   );
 }
+

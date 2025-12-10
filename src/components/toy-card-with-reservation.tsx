@@ -7,6 +7,7 @@ import { Heart, Eye } from "lucide-react";
 import { ToyData } from "@/lib/toys-data";
 import CartButton from "./cart-button";
 import { useFavorites } from "@/contexts/favorites-context";
+import { useToyStock } from "@/contexts/stock-context";
 import { triggerConfetti } from "@/lib/confetti";
 
 interface ToyCardWithReservationProps {
@@ -18,6 +19,9 @@ export default function ToyCardWithReservation({ toy, priority = false }: ToyCar
   const router = useRouter();
   const { isFavorite, toggleFavorite } = useFavorites();
   const toyKey = toy.backendId ?? String(toy.id);
+
+  // Real-time stock from WebSocket
+  const { stockQuantity: wsStock, isConnected } = useToyStock(toyKey);
 
   const handleToggleFavorite = (e: React.MouseEvent, toyId: string) => {
     e.preventDefault(); // Prevent Link navigation
@@ -39,7 +43,7 @@ export default function ToyCardWithReservation({ toy, priority = false }: ToyCar
   };
 
   // Format price
-  const formatPrice = (price: string) => {
+  const formatPrice = (price?: string) => {
     if (!price) return 'Prix sur demande';
     return price;
   };
@@ -80,8 +84,8 @@ export default function ToyCardWithReservation({ toy, priority = false }: ToyCar
           <button
             onClick={(e) => handleToggleFavorite(e, toyKey)}
             className={`flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-all duration-300 ${isFavorite(toyKey)
-                ? 'bg-red-500 text-white scale-110'
-                : 'bg-white text-charcoal hover:bg-red-500 hover:text-white'
+              ? 'bg-red-500 text-white scale-110'
+              : 'bg-white text-charcoal hover:bg-red-500 hover:text-white'
               }`}
             title={isFavorite(toyKey) ? 'Retirer des favoris' : 'Ajouter aux favoris'}
           >
@@ -106,7 +110,7 @@ export default function ToyCardWithReservation({ toy, priority = false }: ToyCar
       {/* Content */}
       <div className="p-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate">
-          {toy.category || 'Non spécifié'}
+          {toy.category?.split(',').filter(cat => !cat.toLowerCase().includes('mois')).join(', ') || 'Non spécifié'}
         </p>
         <h3 className="mt-2 text-lg font-bold text-charcoal group-hover:text-mint transition-colors">
           {toy.name}
@@ -171,7 +175,15 @@ export default function ToyCardWithReservation({ toy, priority = false }: ToyCar
           )}
         </div>
         <p className="mt-1 text-xs text-slate">
-          {toy.stock && parseInt(String(toy.stock)) > 0 ? 'En stock' : 'Pas en stock'}
+          {(() => {
+            // Use WebSocket stock if connected and available, otherwise fallback to static
+            const currentStock = wsStock !== undefined ? wsStock : parseInt(String(toy.stock ?? 0));
+            return currentStock > 0 ? (
+              <span className="text-green-600">✓ En stock ({currentStock})</span>
+            ) : (
+              <span className="text-red-500">✗ Rupture de stock</span>
+            );
+          })()}
         </p>
 
         {/* Actions */}

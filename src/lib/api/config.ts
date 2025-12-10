@@ -1,4 +1,4 @@
-const PUBLIC_API =
+export const PUBLIC_API =
   process.env.NEXT_PUBLIC_API_URL || 'https://louaab.ma/api';
 
 const INTERNAL_API =

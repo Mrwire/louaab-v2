@@ -10,6 +10,7 @@ import {
   UseGuards,
   HttpStatus,
   HttpCode,
+  Header,
 } from '@nestjs/common';
 import { ToyService } from '../services/toy.service';
 import { CreateToyDto, UpdateToyDto, QueryToysDto } from '../dto/create-toy.dto';
@@ -17,7 +18,7 @@ import { ToyStatus } from '../entities/toy.entity';
 
 @Controller('toys')
 export class ToyController {
-  constructor(private readonly toyService: ToyService) {}
+  constructor(private readonly toyService: ToyService) { }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -30,6 +31,7 @@ export class ToyController {
   }
 
   @Get()
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
   async findAll(@Query() query: QueryToysDto) {
     return {
       success: true,
@@ -57,6 +59,7 @@ export class ToyController {
   }
 
   @Get(':id')
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
   async findOne(@Param('id') id: string) {
     return {
       success: true,
@@ -106,6 +109,16 @@ export class ToyController {
       success: true,
       data: { updated },
       message: `Caution mise à jour pour ${updated} jouet(s)`,
+    };
+  }
+
+  @Post('increment-all-stock')
+  async incrementAllStock() {
+    const updated = await this.toyService.incrementStockForAll();
+    return {
+      success: true,
+      data: { updated },
+      message: `Stock incrémenté (+1) pour ${updated} jouet(s)`,
     };
   }
 }
